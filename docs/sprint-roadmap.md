@@ -1,0 +1,211 @@
+# AnyGame-Bench: Sprint Roadmap
+
+Companion to `architecture.md` and `implementation-guide.md`. Sprints are sized as roughly one week of part-time work each; stretch or compress as needed. Each sprint ends with a demo-able result and explicit exit criteria. Order is chosen so the riskiest unknowns (input, capture, judging) are hit early on a fake game before any real one.
+
+## Overview
+
+| Sprint | Theme | Headline outcome |
+|--------|-------|------------------|
+| 0 | Foundations | Repo, models, fake game, capture + input working |
+| 1 | Core loop | A model completes a trivial task in the fake game |
+| 2 | Recording and caps | Every run is fully logged, capped, and killable |
+| 3 | Research and planning | Brief and plan phases, with ablation switch |
+| 4 | Judge and task specs | Automated success verdicts, calibrated against humans |
+| 5 | First real game | OSRS "kill a goblin" runs across multiple models |
+| 6 | Breadth and difficulty | Emulated game, generic "level up" tasks, paused mode |
+| 7 | Analysis and release | Reports, post-mortems, MCP mode, write-up |
+
+---
+
+## Sprint 0: Foundations
+
+**Goal:** Prove the plumbing works before any AI is involved.
+
+Tasks:
+- Create repo, `pyproject.toml`, lint/test setup, `.gitignore` for `runs/` and secrets.
+- Implement `models.py` (TaskSpec, Action, Limits) and YAML loading.
+- Build `testbed/fakegame.py`: a pygame window with a red square to click, then a door, then a simple enemy.
+- Implement `capture.py` (window grab, downscale, scale factor) and `inputs.py` (click, key, window clamping).
+- Set DPI awareness; write a calibration test that clicks known targets at several window sizes.
+- Implement `killswitch.py` and verify it halts input.
+
+**Exit criteria:**
+- A scripted (non-AI) action list clicks the red square in the fake game with exact accuracy.
+- Out-of-window actions are refused.
+- Kill switch stops a running script within 1 second.
+
+**Risks:** DPI scaling, windowed capture quirks. Budget extra time here; every later sprint depends on it.
+
+---
+
+## Sprint 1: Core loop
+
+**Goal:** A model plays the fake game end to end.
+
+Tasks:
+- Implement `agent/openai_compat.py` and `models.yaml` profiles (base URL, price, vision flag).
+- Implement `parsing.py` (tolerant JSON actions, one re-ask on error) and `prompts.py`.
+- Implement `loop.py`: capture, prompt, decide, act, repeat, with `done` handling.
+- Add settle delay after actions and simple stuck detection (frame diff).
+- Add a mock/scripted agent for cost-free orchestration tests.
+- Run 3 models (one frontier reference, two free vision models) on "click the red square" and "reach the door."
+
+**Exit criteria:**
+- At least one model completes both fake-game tasks.
+- Invalid-output rate and latency are logged per model.
+- Failed runs terminate cleanly (cap or kill), never hang.
+
+**Deliverable:** First tiny results table, even if it only proves the loop.
+
+---
+
+## Sprint 2: Recording and caps
+
+**Goal:** Runs are reproducible artifacts, not terminal output.
+
+Tasks:
+- `recorder.py`: `steps.jsonl` (flushed per step), JPEG frames, independent `ffmpeg` MP4 capture.
+- Run folder structure: `runs/<date>_<task>_<model>_<n>/`.
+- `orchestrator.py`: owns lifecycle, enforces `max_steps`, `max_wall_minutes`, `max_cost_usd`.
+- Token and cost accounting per step; summary in `result.json`.
+- Simple local replay viewer (scrub frames with the action overlay) as a script or tiny HTML page.
+- Secrets hygiene: redact API keys from saved prompts and logs.
+
+**Exit criteria:**
+- Any run can be replayed visually from its folder alone.
+- Each cap, when hit, produces the correct `outcome` and a valid `result.json`.
+- A crash mid-run still leaves usable partial logs.
+
+---
+
+## Sprint 3: Research and planning
+
+**Goal:** Add the novel phases from the original idea.
+
+Tasks:
+- `research.py`: time-boxed research producing `brief.md`. Support three modes: `web` (tool-calling or harness-driven search/fetch), `none`, and `provided`.
+- `planner.py`: goal + brief into ordered subgoals with observable checks; `plan.md`.
+- Inject current subgoal and plan into every loop prompt; add replan trigger (stuck or agent request) and count replans.
+- Track time and tokens separately for research, plan, and execute.
+- Write a human-authored brief for one fake-game task to serve as the `provided` baseline.
+
+**Exit criteria:**
+- Same task runs under all three research modes with the mode recorded in the result.
+- Briefs are saved and readable; replans appear in the step log.
+- On the fake game, measurable difference (or lack of one) between modes on at least one model.
+
+**Risk:** Research quality varies a lot for weak models without tool calling. The harness-driven search loop is the fallback.
+
+---
+
+## Sprint 4: Judge and task specs
+
+**Goal:** Automated, trustworthy success verification.
+
+Tasks:
+- Finalize task spec format: `success.evidence`, `evidence_step`, baseline snapshot, milestones.
+- Implement the evidence turn: after a `done` claim, the agent gets a few capped steps to show proof.
+- `judge.py`: VLM judge with keyframe selection, cited frames, strict-by-default prompt; judges never see agent thoughts.
+- Double-run judging (shuffled frame order) with escalation on disagreement.
+- Adapter hook interface for deterministic verifiers (OCR region check, region diff).
+- Human labeling: hand-label 20-30 runs (fake game plus a few real recordings); compute judge agreement, false-positive and false-negative rates.
+- Add tasks to the fake game specifically designed to fool the judge (near-miss states).
+
+**Exit criteria:**
+- Judge agreement with human labels is measured and written down. Target is roughly 90 percent or better on the fake game; whatever the number is, it is published with results.
+- `premature_done` cases are correctly caught.
+- Results record which verifiers were used.
+
+**Risk:** Generic judging of subtle outcomes (like a rank change) is the weakest point; expect to iterate on prompts and keyframe sampling.
+
+---
+
+## Sprint 5: First real game (OSRS goblin)
+
+**Goal:** First real benchmark numbers.
+
+Tasks:
+- Create a throwaway account; script or document the start state (position, layout, resolution).
+- Write `tasks/osrs/kill-goblin.yaml` with evidence (chat line, XP increase, goblin death) and evidence step (open Skills tab).
+- Build optional `adapters/osrs.py`: chat-box OCR for "defeated", XP diff.
+- Run the model matrix: 1 frontier reference + 3-5 free/open vision models, at least 5 runs each, `assist_level` L0.
+- Run the same matrix with L1 (grid overlay) to measure how much grounding help changes outcomes.
+- Run `research=web` vs `none` on the best two models.
+- Generate first post-mortems; tag failure categories.
+
+**Exit criteria:**
+- Table of success rate, median steps, median time, and cost per model, with `n` shown.
+- Failure taxonomy histogram from at least 30 runs.
+- No account-safety incidents; kill switch tested before each session.
+
+**Risks:** Latency makes combat-adjacent tasks flaky; account bans (accepted, throwaway only). If OSRS proves too fragile for realtime, run an emulator task first (Sprint 6 item) and return.
+
+---
+
+## Sprint 6: Breadth and difficulty
+
+**Goal:** Prove it is genuinely any-game, and add generic tasks.
+
+Tasks:
+- Add `time_mode=paused`: emulator pause/frame-advance first, then process suspend for offline native games. Never for online games.
+- Add an emulated game task (e.g., a Pokemon-style first battle) as a turn-based comparison point against existing public runs.
+- Add generic tasks: "gain a level or rank" in at least two games, including one where level-ups are subtle (e.g., an offline or campaign shooter with a rank screen). Use baseline snapshot plus evidence step.
+- Add a tier 3 task in a 3D game (offline). Expect low success; the goal is to see where the generic approach breaks.
+- Add `stuck budget` fail-fast and tune the stuck-hint text.
+- Update the adapter system based on what real games needed; keep the core free of game-specific code.
+
+**Exit criteria:**
+- At least 3 distinct games and 2 generic tasks run through the same core without core changes.
+- Paused vs realtime comparison on one task, showing the effect of latency.
+- Updated difficulty tiers based on actual results.
+
+---
+
+## Sprint 7: Analysis and release
+
+**Goal:** Turn the pile of runs into a shareable result.
+
+Tasks:
+- `report.py`: aggregate to SQLite; per (task, model, config) tables: success rate, median and IQR for steps/time/cost, failure histogram, judge agreement.
+- Post-mortem aggregation: most common wrong research facts, most common perception failures.
+- Implement Mode B (MCP server) and run opencode through it on 2-3 tasks; compare against Mode A for the same model and note differences.
+- Static results page (single HTML file) with run videos linked.
+- Write-up: methodology, judge accuracy, limitations, ethics note (throwaway/offline only), and reproduction steps.
+- Decide what to open-source: framing as a research harness with logged results; avoid shipping game-specific bot scripts or anti-cheat workarounds.
+
+**Exit criteria:**
+- Someone else can clone the repo, run the fake-game task with a free model, and reproduce the pipeline.
+- Published tables never rank on fewer than 5 runs per cell.
+- Limitations section covers judge noise, start-state variance, and free-model rate limits.
+
+---
+
+## Task backlog (by tier)
+
+| Tier | Task | Notes |
+|------|------|-------|
+| 0 | Fake game: click square, reach door | Harness testing |
+| 1 | OSRS: kill a goblin | Slow ticks, click-to-move |
+| 1 | Emulated RPG: win first battle | Turn-based, pausable |
+| 2 | OSRS: gain a level (any skill) | Tests subtle-progress judging |
+| 2 | Offline 2D game: reach a named location | Navigation |
+| 3 | WoW (throwaway) or offline MMO-like: kill a boar | 3D movement and targeting |
+| 3 | Offline shooter/campaign: gain a rank | Subtle evidence in menus |
+| 4 | Stealth/action game: eliminate a named target | Navigation, stealth, combat |
+| 4 | Real-time FPS campaign: eliminate one enemy | Aiming and latency; expect near-zero success |
+
+## Cross-cutting risks
+
+- **Free-model limits:** rate limits and context caps will cap run lengths. Log retries; don't count rate-limit waits as thinking time.
+- **Judge validity:** the whole benchmark rests on it. Never skip human calibration.
+- **Variance:** stochastic agents; require repeated runs before drawing conclusions.
+- **Safety:** throwaway/offline only; kill switch checked every session; avoid titles with hardware-ban anti-cheat.
+- **Scope creep:** resist adding per-game cleverness to the core. If a game needs it, it goes in an adapter and is reported as such.
+
+## Definition of done (v1)
+
+- Core runs unchanged across at least 3 games.
+- At least 5 models benchmarked with 5+ runs per cell on tier 1 tasks.
+- Judge accuracy measured against human labels and published.
+- Research on/off and assist-level ablations reported.
+- Full replayable artifacts for every reported run.
