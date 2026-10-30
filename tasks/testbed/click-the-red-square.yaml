@@ -1,0 +1,20 @@
+id: testbed-click-red-square-001
+game: fakegame
+title: Click the red square
+goal: "Click the red square in the game window."
+tier: 1
+mode: study
+start_state: >
+  The fake game window (800x600) is open. A red square is visible.
+success:
+  evidence: "The red square is clicked while visible (the hit counter increments)."
+  verifiers: [scripted]
+limits:
+  max_steps: 20
+  max_wall_minutes: 5
+  max_cost_usd: 0.0
+research:
+  mode: none
+loop:
+  time_mode: realtime
+  assist_level: L0

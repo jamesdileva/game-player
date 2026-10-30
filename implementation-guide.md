@@ -111,26 +111,43 @@ class Done(BaseModel):
     claim: str = ""
 
 # add DoubleClick, Drag, Move, Scroll the same way
-Action = Union[Click, Key, Type_, Wait, Note, Done]
+Action = Union[Click, DoubleClick, Drag, Move, Key, Type_, Scroll, Wait, Note, Done]
 
 class Limits(BaseModel):
     max_steps: int = 300
     max_wall_minutes: float = 45
+    max_wall_hours: Optional[float] = None  # attempt mode: primary cap
     max_cost_usd: float = 5.0
 
+class SuccessConfig(BaseModel):
+    evidence: str
+    evidence_step: Optional[str] = None
+    verifiers: list[str] = ["vlm"]
+
+class ResearchConfig(BaseModel):
+    mode: Literal["web", "none", "provided"] = "web"
+    max_minutes: int = 10
+
+class LoopConfig(BaseModel):
+    time_mode: Literal["realtime", "paused"] = "realtime"
+    assist_level: Literal["L0", "L1", "L2"] = "L0"
+    topology: Literal["single", "hybrid"] = "single"
+    decision_hz: Optional[float] = None
+
+# Task spec fields mirror the nested YAML contract in architecture.md 7.1
 class TaskSpec(BaseModel):
     id: str
     game: str
+    title: str = ""
     goal: str
     tier: int = 1
-    start_state: str
-    success_evidence: str
-    evidence_step: Optional[str] = None
-    verifiers: list[str] = ["vlm"]
+    mode: Literal["study", "attempt"] = "study"
+    start_state: str = ""
+    success: SuccessConfig
     limits: Limits = Limits()
-    research_mode: Literal["web", "none", "provided"] = "web"
-    time_mode: Literal["realtime", "paused"] = "realtime"
-    assist_level: Literal["L0", "L1", "L2"] = "L0"
+    checkpoint_every_steps: int = 25
+    research: ResearchConfig = ResearchConfig()
+    loop: LoopConfig = LoopConfig()
 ```
 
 ## 4. Capture and input

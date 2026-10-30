@@ -1,0 +1,16 @@
+# Run artifacts (one folder per run; never commit)
+runs/
+
+# Secrets
+.env
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
