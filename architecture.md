@@ -90,6 +90,11 @@ Two integration modes:
 - **Mode A, harness-driven:** the harness calls any OpenAI-compatible chat endpoint (OpenRouter, Ollama, LM Studio, a vendor API). We own the loop, so step and token accounting is exact.
 - **Mode B, MCP server:** the harness exposes `screenshot`, `click`, `key`, `wait`, `note`, `done` as MCP tools, and an external agent (opencode, etc.) drives it. We count tool calls and observe tokens through the agent's own logs where possible. Less exact, but lets you benchmark whole agent frameworks, not just models.
 
+Two topologies (ablation axis `topology`):
+
+- **Single:** one model loop observes and acts directly. Default.
+- **Hybrid:** a slow planner emits intents to a fast reflex module (5.14), for precision-heavy tasks.
+
 ### 5.6 Perception Assist Levels
 An ablation axis. The agent's observation is built according to the assist level:
 
@@ -123,6 +128,24 @@ See section 8.
 ### 5.12 Post-mortem
 After judging, a separate model pass reads the brief, plan, step log, and key frames and writes `postmortem.md`: what worked, where the plan's assumptions were wrong, failure category, and what a human would have done differently. Failure categories are tagged for aggregate analysis (section 9.4).
 
+### 5.13 Run modes and the case file
+Two run modes share the same core (merged from `addendum-attempt-mode.md`):
+
+- **Study mode** (default): the statistical benchmark. 5+ runs per cell; success rates and medians; rankings allowed.
+- **Attempt mode:** one agent, one task, one long run, producing a **case file** — a narrative report (timeline with linked frames, discoveries, struggles, cost, "what a human would have done", reproduce config), explicitly labeled n=1 and never used for rankings. Caps are wall-clock and budget first (`max_wall_hours`, `max_cost_usd`); step caps are a secondary guard.
+
+Long runs additionally require: checkpointing (run state persisted to `checkpoint.json` every N steps; `agb resume <run_dir>` continues after a crash, logging the gap so it is not counted as thinking time), context compaction (history summarized every K steps, drops logged), heartbeat/stuck handling, milestone checks for partial credit, and rate-limit backoff with waits logged separately from inference time.
+
+### 5.14 Reflex module (hybrid topology)
+In hybrid topology the planner does not emit raw clicks; it emits **intents** for a fast reflex module (merged from `experiment-hybrid-agent.md`):
+
+```json
+{"intent": "track_and_shoot", "target": "enemy soldier", "until": "target_dead_or_5s"}
+{"intent": "move_to", "region": {"x": 800, "y": 300, "w": 200, "h": 200}, "until": "arrived_or_4s"}
+```
+
+Every intent has a timeout so the reflex loop can never run unattended. Reflex implementations are interchangeable ablations: classical CV tracking, a small trained detector, or a fast small VLM. Intents may only invoke the standard action space, and the reflex module's compute is reported. A reflex that tracks and shoots is functionally an aimbot — section 11 applies.
+
 ## 6. Run lifecycle
 
 ```
@@ -139,6 +162,8 @@ After judging, a separate model pass reads the brief, plan, step log, and key fr
 
 The baseline snapshot in step 0 matters for generic tasks like "gain a level": the judge compares before and after.
 
+In attempt mode (5.13) the lifecycle is unchanged but longer: caps are wall-clock and budget first, EXECUTE checkpoints every N steps, and ANALYZE produces the case file alongside the result record.
+
 ## 7. Data contracts
 
 ### 7.1 Task spec
@@ -149,6 +174,7 @@ game: osrs
 title: Kill one goblin
 goal: "Kill one goblin."
 tier: 1                      # 1 easy ... 4 very hard
+mode: study                  # study | attempt (5.13)
 start_state: >
   Logged in, standing in Lumbridge near the castle. Default combat stats.
   Default client layout and resolution.
@@ -165,15 +191,19 @@ success:
     After the kill, open the Skills tab so XP totals are visible.
   verifiers: [vlm]           # adapters appended per game, e.g. adapter:osrs_chat
 limits:
-  max_steps: 300
+  max_steps: 300             # secondary guard
   max_wall_minutes: 45
+  max_wall_hours: null       # attempt mode: primary cap
   max_cost_usd: 5.00
+checkpoint_every_steps: 25    # attempt mode: persist state for resume
 research:
   mode: web                  # web | none | provided
   max_minutes: 10
 loop:
   time_mode: realtime        # realtime | paused
   assist_level: L0
+  topology: single           # single | hybrid (5.14)
+  decision_hz: null          # optional decision-rate throttle (ablation axis)
 ```
 
 Generic task example (the "level up" idea):
@@ -225,14 +255,19 @@ Coordinates are in the downscaled frame the agent sees. The harness maps them to
 ```json
 {
   "run_id": "...", "task_id": "...", "model": "...", "agent_mode": "A",
-  "assist_level": "L0", "research_mode": "web", "time_mode": "realtime",
+  "mode": "study", "assist_level": "L0", "research_mode": "web", "time_mode": "realtime",
+  "model_pin": {"id": "...", "provider": "...", "quantization": null, "file_hash": null, "access_date": "2026-10-30"},
+  "hardware": {"cpu": "...", "gpu": "...", "ram_gb": 32, "runtime": "...", "tokens_per_s": null},
+  "resumed_count": 0,
   "outcome": "success|partial|fail|timeout|aborted",
   "verifier": {"used": ["vlm"], "confidence": 0.82, "judge_model": "..."},
   "metrics": {
     "steps": 143, "wall_seconds": 612, "model_calls": 150,
     "tokens_in": 310000, "tokens_out": 24000, "cost_usd": 0.0,
     "research_seconds": 140, "plan_seconds": 20, "execute_seconds": 452,
-    "replans": 2, "stuck_events": 3, "invalid_actions": 5
+    "replans": 2, "stuck_events": 3, "invalid_actions": 5,
+    "topology": "single", "decision_hz": null, "reaction_ms": null,
+    "aim_error_px": null, "reflex_hz": null, "reflex_cost": null
   },
   "failure_category": null
 }
@@ -258,7 +293,7 @@ Rules:
 Same window size and capture resolution, same action space, same caps, same start state (saved character, emulator save state, or a setup script), same judge.
 
 ### 9.2 Repetition
-Agents are stochastic. Report success rate and median/IQR of steps, time, and cost over at least 5 runs per (task, model, config).
+Agents are stochastic. Report success rate and median/IQR of steps, time, and cost over at least 5 runs per (task, model, config). Attempt mode (5.13) is exempt from the n >= 5 rule, but its case files are labeled n=1 and never used for rankings.
 
 ### 9.3 Real-time vs paused
 Slow models are penalized in live games because the world keeps moving. Two modes, always reported:
@@ -271,6 +306,7 @@ Each failed run gets one primary tag from the post-mortem:
 - `plan_infeasible`
 - `perception` (misread the screen)
 - `grounding` (right target, wrong click)
+- `precision` (right intent, missed aim on small or fast targets; measured by the calibration micro-benchmark)
 - `navigation_lost`
 - `stuck_loop`
 - `ui_modal` (stuck in a menu/dialog)
@@ -279,7 +315,7 @@ Each failed run gets one primary tag from the post-mortem:
 - `budget` (cap hit while progressing)
 
 ### 9.5 Ablation axes
-Research mode, assist level, time mode, number of context frames, agent mode (A vs B). Change one at a time.
+Research mode, assist level, time mode, number of context frames, agent mode (A vs B), run mode (attempt vs study), decision_hz, topology (single vs hybrid), reflex implementation. Change one at a time.
 
 ## 10. Model strategy
 
@@ -287,6 +323,8 @@ Research mode, assist level, time mode, number of context frames, agent mode (A 
 - **Free/open tier:** free-endpoint and locally hosted vision models. Check which currently support image input before planning runs, since this changes often.
 - **Text-only models:** supported via a *captioner* mode where a fixed small VLM describes the frame in text. This confounds the result, so these are reported in a separate bracket.
 - **Output reliability:** weaker models often produce malformed actions. The parser tolerates fenced JSON and minor errors, then re-asks once. Invalid actions are counted as a metric, not hidden.
+- **Model ladder:** compare agents on the same task under identical settings: one frontier reference (ceiling), earlier-generation API models (record exact model ID, provider, and access date; mark "may not be reproducible"), local open models pinned by name/quantization/file hash (record hardware and tokens per second), and deliberately tiny models whose failure modes are the useful result.
+- **Constrained decoding:** grammar or JSON-schema constrained output for local runtimes, to cut invalid actions. Always its own reported switch, never hidden in the baseline.
 
 ## 11. Safety and ethics
 
@@ -296,6 +334,7 @@ Research mode, assist level, time mode, number of context frames, agent mode (A 
 - **Global kill switch** (hotkey) halts input injection immediately.
 - Input is clamped to the game window. The agent cannot type into other apps.
 - No credential handling by the agent. Logins happen during setup, by a human.
+- Hybrid/reflex experiments: a module that tracks and shoots is functionally an aimbot. Offline games, aim trainers, and the fake game only; never online multiplayer or titles with kernel-level anti-cheat; never ship reflex modules packaged for specific commercial games.
 - API keys live in environment variables, never in task specs or logs. Redact when saving prompts.
 
 ## 12. Open questions

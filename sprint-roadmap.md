@@ -12,7 +12,15 @@ Companion to `architecture.md` and `implementation-guide.md`. Sprints are sized 
 | 3 | Research and planning | Brief and plan phases, with ablation switch |
 | 4 | Judge and task specs | Automated success verdicts, calibrated against humans |
 | 5 | First real game | OSRS "kill a goblin" runs across multiple models |
+| A1 | Long-run foundations | Checkpoint/resume, compaction, wall-clock and budget caps |
+| A2 | Case file and attach | Case-file generator, window picker, black-capture warning |
+| A3 | Model ladder | Attempt-mode case files across frontier, older, and local models |
 | 6 | Breadth and difficulty | Emulated game, generic "level up" tasks, paused mode |
+| H1 | Calibration micro-benchmark | Hit rate vs target size and speed per model |
+| H2 | Decision-frequency ablation | Success vs decision frequency and cost |
+| H3 | Reflex and intents | Hybrid beats the slow loop on the calibration scene |
+| H4 | Hybrid on a real offline game | First C0-C4 comparison on a real task |
+| H5 | Analysis | Understanding vs precision vs latency decomposition |
 | 7 | Analysis and release | Reports, post-mortems, MCP mode, write-up |
 
 ---
@@ -142,6 +150,47 @@ Tasks:
 
 ---
 
+## Sprint A1: Long-run foundations
+
+**Goal:** Runs can last hours and survive crashes. *(Merged from `addendum-attempt-mode.md`.)*
+
+Tasks:
+- `checkpoint.py`: persist plan, scratchpad, compacted history, and counters to `checkpoint.json` every N steps; `agb resume <run_dir>` continues after a crash or rate-limit stall, logging the gap so it is not counted as thinking time.
+- Context compaction: running "story so far" summary every K steps; log what was dropped.
+- Wall-clock and budget caps as primary limits (`max_wall_hours`); step caps secondary.
+- Rate-limit backoff and retry; log waits separately from inference time.
+
+**Exit criteria:** A 2-hour fake-game run survives a forced crash and resumes to completion.
+
+---
+
+## Sprint A2: Case file and `attach`
+
+**Goal:** Attempt-mode outputs and painless run targeting.
+
+Tasks:
+- `casefile.py`: auto-generated case file (header with n=1 disclaimer, outcome, timeline with linked frames, discoveries, struggles, cost, "what a human would have done", reproduce config).
+- `agb attach`: list visible windows (title, size, process), pick one; record its size/DPI as the run target.
+- Warnings: black capture (exclusive fullscreen) and known anti-cheat titles.
+- Verify the kill switch is armed before the run starts.
+
+**Exit criteria:** Any open window can be attached; a finished run produces a readable case file.
+
+---
+
+## Sprint A3: Model ladder
+
+**Goal:** Same task, many agents, attempt mode.
+
+Tasks:
+- Run one task in attempt mode across: one frontier model, one older API model (record ID, provider, access date), and 2-3 local open models pinned by name/quantization/hash.
+- Add constrained-decoding and captioner variants where the runtime supports them.
+- Record hardware (CPU, GPU, RAM, runtime, tokens/second) in every result.
+
+**Exit criteria:** A set of case files plus a short comparison note, clearly labeled n=1 and never ranked.
+
+---
+
 ## Sprint 6: Breadth and difficulty
 
 **Goal:** Prove it is genuinely any-game, and add generic tasks.
@@ -161,12 +210,73 @@ Tasks:
 
 ---
 
+## Sprint H1: Calibration micro-benchmark
+
+**Goal:** Separate "can't see precisely" from "can't think fast enough." *(Merged from `experiment-hybrid-agent.md`.)*
+
+Tasks:
+- `testbed/aimscene.py`: moving-target scene in the fake game with ground-truth positions logged; circular targets of controllable size (10-80 px) and speed.
+- Run the model matrix paused and realtime; output hit rate and pixel error as a function of size and speed.
+
+**Exit criteria:** A plot showing where each model's pointing precision falls off.
+
+---
+
+## Sprint H2: Decision-frequency ablation
+
+**Goal:** Measure what decision rate buys.
+
+Tasks:
+- Add `decision_hz` control (throttle or batch actions); measure effective Hz per model.
+- Run C0 (slow loop, realtime), C1 (slow loop, paused), and C2 (fast small-model loop) on the calibration scene and one tier-1 task.
+
+**Exit criteria:** Results table: success vs decision frequency and cost.
+
+---
+
+## Sprint H3: Reflex module and intent protocol
+
+**Goal:** First hybrid.
+
+Tasks:
+- `intents.py`: intent schema with mandatory timeouts; planner-to-reflex handoff.
+- `reflex/classical.py` (CV tracking) first, then `reflex/vlm.py`.
+- Run C3 (hybrid) on the calibration scene's moving-target task.
+
+**Exit criteria:** The hybrid completes the moving-target task at a higher rate than C0.
+
+---
+
+## Sprint H4: Hybrid on a real offline game
+
+**Goal:** C0-C4 on a real task.
+
+Tasks:
+- Run C0-C3 on an offline tier-3/4 task (aim trainer first, then an offline shooter against bots).
+- Add the C4 specialist/oracle ceiling where feasible; label and report it separately.
+
+**Exit criteria:** First C0-C4 comparison on a real game task with n >= 5 runs per cell.
+
+---
+
+## Sprint H5: Analysis
+
+**Goal:** Decompose failures into understanding vs precision vs latency.
+
+Tasks:
+- Use the `precision` and `timing` failure tags to split causes.
+- Write up what the hybrid fixed, what it did not, and what it cost.
+
+**Exit criteria:** Short report with conclusions about H1-H4.
+
+---
+
 ## Sprint 7: Analysis and release
 
 **Goal:** Turn the pile of runs into a shareable result.
 
 Tasks:
-- `report.py`: aggregate to SQLite; per (task, model, config) tables: success rate, median and IQR for steps/time/cost, failure histogram, judge agreement.
+- `report.py`: aggregate to SQLite; per (task, model, config) tables: success rate, median and IQR for steps/time/cost, failure histogram, judge agreement. Include the C0-C4 hybrid comparison tables (Sprints H1-H4) and attempt-mode case files (A2-A3).
 - Post-mortem aggregation: most common wrong research facts, most common perception failures.
 - Implement Mode B (MCP server) and run opencode through it on 2-3 tasks; compare against Mode A for the same model and note differences.
 - Static results page (single HTML file) with run videos linked.
@@ -185,6 +295,7 @@ Tasks:
 | Tier | Task | Notes |
 |------|------|-------|
 | 0 | Fake game: click square, reach door | Harness testing |
+| 0 | Fake game: calibration aim scene (moving targets) | Hybrid experiment, Sprint H1 |
 | 1 | OSRS: kill a goblin | Slow ticks, click-to-move |
 | 1 | Emulated RPG: win first battle | Turn-based, pausable |
 | 2 | OSRS: gain a level (any skill) | Tests subtle-progress judging |

@@ -10,6 +10,7 @@ Companion to `architecture.md`. This explains how to build it: stack, repo layou
 | Window capture | `mss` + `pygetwindow` (Windows) | Capture only the target window rect |
 | Input | `pydirectinput` (Windows), `pyautogui` fallback | Many games ignore plain key events; DirectInput scancodes work more often |
 | Kill switch | `pynput` global hotkey | Must work even if the game has focus |
+| Process control | `psutil` | Paused-mode suspend/resume of native games; hardware logging |
 | Image handling | `Pillow`, `opencv-python` | Resize, grid overlay, diffing |
 | OCR (L2 assist, adapters) | `rapidocr-onnxruntime` or `pytesseract` | Local, free |
 | HTTP/model calls | `httpx` | Talk to any OpenAI-compatible endpoint |
@@ -24,10 +25,13 @@ Companion to `architecture.md`. This explains how to build it: stack, repo layou
 ## 2. Repo layout
 
 ```
-anygame-bench/
+game-player/
   pyproject.toml
   README.md
-  docs/                       # architecture.md, implementation-guide.md, sprint-roadmap.md
+  AGENTS.md                   # working agreement: sprint workflow, conventions
+  architecture.md             # docs live at the repo root
+  implementation-guide.md
+  sprint-roadmap.md
   tasks/
     osrs/kill-goblin.yaml
     osrs/gain-level.yaml
@@ -37,6 +41,7 @@ anygame-bench/
     osrs.py                   # optional OCR/regions
   testbed/
     fakegame.py               # tiny pygame game for harness tests
+    aimscene.py               # calibration micro-benchmark scene (hybrid experiment)
   src/agb/
     models.py                 # pydantic: TaskSpec, Action, StepRecord, Result
     config.py                 # load env, defaults, model profiles
@@ -47,8 +52,17 @@ anygame-bench/
     agent/
       base.py                 # Agent protocol
       openai_compat.py        # Mode A client
+      hybrid.py               # planner + reflex topology
       parsing.py              # tolerant action parsing
       prompts.py
+    intents.py                # planner -> reflex intent protocol
+    reflex/
+      classical.py            # CV tracking reflex
+      detector.py             # small trained detector reflex
+      vlm.py                  # fast small VLM reflex
+    checkpoint.py             # attempt mode: persist/resume run state
+    compaction.py             # context compaction for long runs
+    casefile.py               # attempt-mode case file generator
     mcp_server.py             # Mode B
     research.py
     planner.py
@@ -58,7 +72,7 @@ anygame-bench/
     judge.py
     postmortem.py
     report.py                 # aggregate tables
-    cli.py
+    cli.py                    # run, judge, report, attach, resume
   runs/                       # gitignored; one folder per run
   tests/
 ```
@@ -353,12 +367,21 @@ def execute(task, agent, cap, inp, rec, kill, state):
 
 `detect_stuck`: compare successive downscaled frames and action repeats. If the screen hasn't meaningfully changed for N steps while actions repeat, record a `stuck_event` and inject a hint into the next prompt ("Your last 5 actions did not change the screen"). Keep the hint identical across all models.
 
+### 9.1 Long-run support (attempt mode)
+
+- **Checkpointing:** every `checkpoint_every_steps` steps, dump plan, scratchpad, compacted history, and counters to `checkpoint.json` in the run folder. `agb resume <run_dir>` reloads and continues; the gap is logged and excluded from thinking time.
+- **Compaction:** every K steps, summarize old history into a running "story so far"; keep only recent frames; log what was dropped.
+- **Rate-limit tolerance:** back off and retry on free-tier limits; log waits separately from inference time.
+- **Hardware record:** log CPU, GPU, RAM, runtime, and tokens/second (`psutil`) in every result; local results mean little without them.
+- **Grammar-constrained decoding:** where the local runtime supports it, enforce the action JSON schema to cut invalid actions; reported as its own switch.
+
 ## 10. Recorder
 
 - Start `ffmpeg` at run begin to capture the window region at ~10 fps (gdigrab on Windows, x11grab on Linux), writing `run.mp4`.
 - Write `steps.jsonl` line by line (flush each step so crashes still leave data).
 - Save frames as JPEG quality ~80; keep full-res only for sampled keyframes if disk is a concern.
 - Run folder layout: `runs/<date>_<task>_<model>_<n>/{task.yaml, brief.md, plan.md, steps.jsonl, frames/, run.mp4, result.json, postmortem.md}`.
+- Timestamp every frame at grab time with both the wall clock and a monotonic clock, so reaction times (`reaction_ms` in hybrid experiments) can be computed from the recording.
 
 ## 11. Judge
 
