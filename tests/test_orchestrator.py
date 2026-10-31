@@ -12,6 +12,7 @@ import pytest
 from tests.conftest import ROOT
 from tests.fakes import FakeCapture, KillNever
 
+from agb.agent.base import Decision
 from agb.agent.mock import ScriptedAgent
 from agb.capture import ensure_foreground
 from agb.inputs import WindowInput
@@ -70,15 +71,23 @@ class TestOrchestratorRun:
         from agb.capture import WindowCapture
 
         cap = WindowCapture("FakeGame")
-        agent = ScriptedAgent(
-            [[Click(x=SQUARE_CENTER[0], y=SQUARE_CENTER[1])], [Done(claim="clicked")]]
-        )
+        agent = ScriptedAgent([
+            "Move the mouse to the red square and left-click it once.",  # research
+            '{"subgoals": [{"text": "click the square",'
+            ' "check": "hit counter increments"}]}',  # plan
+            [Click(x=SQUARE_CENTER[0], y=SQUARE_CENTER[1])],  # execute
+            [Done(claim="clicked")],
+        ])
         record = run_orchestrated(
             _task("click-the-red-square"), agent, cap, KillSwitch(),
             tmp_path, view_max=(640, 480),
         )
         run_dir = tmp_path / record["run_id"]
         assert record["success"] is True
+        assert record["research_mode"] == "none"
+        assert record["replans"] == 0
+        assert (run_dir / "brief.md").exists()
+        assert (run_dir / "plan.md").exists()
         assert (run_dir / "result.json").exists()
         assert (run_dir / "replay.html").exists()
         assert (run_dir / "run.mp4").exists()
@@ -91,6 +100,38 @@ class TestOrchestratorRun:
         assert any(r.get("raw_reply") for r in recs)  # raw replies recorded for debugging
         html = (run_dir / "replay.html").read_text(encoding="utf-8")
         assert recs[0]["frame"] in html
+
+    def test_replan_during_run_is_counted(self, tmp_path):
+        """Regression: the replan closure must unwrap to a Plan, not a tuple."""
+        spec = _task("click-the-red-square")
+        plan_json = '{"subgoals": [{"text": "click the square", "check": "hits increment"}]}'
+
+        class PhasedAgent:
+            """Replies by prompt type: research/plan/replan/loop, deterministic."""
+
+            name = "phased-mock"
+
+            def decide(self, system, user, images):
+                usage = {"in_tokens": 1, "out_tokens": 1, "cost_usd": 0.0, "latency_ms": 1}
+                if "Write a concise brief" in user:
+                    return Decision("brief: click the square at (430, 330).", usage)
+                if "The approach is stuck" in user or (
+                    "subgoals" in user and "PLAN (do these in order)" not in user
+                ):
+                    return Decision(plan_json, usage)
+                return Decision(
+                    '{"thought": "clicking background",'
+                    ' "actions": [{"type": "click", "x": 10, "y": 550}]}',
+                    usage,
+                )
+
+        cap = FakeCapture()
+        record = run_orchestrated(spec, PhasedAgent(), cap, KillNever(), tmp_path,
+                                  view_max=(640, 480), max_steps=12)
+        assert record["outcome"] in ("cap_steps", "claimed_done")  # no error outcome
+        assert record["replans"] >= 1
+        assert record["research_mode"] == "none"
+        assert (tmp_path / record["run_id"] / "plan.md").exists()
 
     def test_crash_mid_run_leaves_partial_logs(self, tmp_path):
         """Exit criterion 3: a crash still leaves usable partial logs."""

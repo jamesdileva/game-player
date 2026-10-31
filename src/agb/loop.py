@@ -32,6 +32,7 @@ _MAX_WAIT_MS = 2000
 _MODEL_ATTEMPTS = 2  # tries per model call (transient failures)
 _MODEL_BACKOFF_S = 3.0
 _MAX_CONSECUTIVE_MODEL_FAILURES = 3  # then abort with model_error
+_REPLAN_MIN_STEPS = 5  # throttle: at most one replan per 5 steps
 
 _CALIBRATION_PROMPT = (
     "A large magenta dot was drawn on this screenshot at a known position. "
@@ -129,6 +130,7 @@ class LoopResult:
     errors: list[str] = field(default_factory=list)
     raw_samples: list[str] = field(default_factory=list)  # first N raw replies
     frame_scale: tuple[float, float] | None = None  # measured model coordinate frame
+    replans: int = 0
     scratchpad: str = ""
 
     @property
@@ -220,6 +222,8 @@ def execute(
     kill: KillSwitch,
     *,
     recorder=None,
+    plan=None,
+    replan_fn=None,
     max_steps: int | None = None,
     max_wall_minutes: float | None = None,
     max_cost_usd: float | None = None,
@@ -243,6 +247,7 @@ def execute(
     consecutive_model_failures = 0
     wants_calibration = getattr(agent, "frame_calibration", False)
     frame_scale: tuple[float, float] | None = (1.0, 1.0) if not wants_calibration else None
+    last_replan_step = -_REPLAN_MIN_STEPS
     t_start = time.perf_counter()
 
     for _step in range(steps_cap):
@@ -283,9 +288,13 @@ def execute(
         else:
             unchanged_steps = 0
 
+        want_replan = stuck_now  # a stuck event requests a replan (throttled below)
+
         user = build_user_message(
             task.goal, scratchpad, recent, stuck=stuck_now, patience=stuck_patience
         )
+        if plan is not None:
+            user += f"\n\nPLAN (do these in order):\n{plan.render()}"
         if task.loop.assist_level in ("L1", "L2"):
             user += (
                 f"\nThe screenshot has a labeled yellow coordinate grid "
@@ -356,6 +365,8 @@ def execute(
             if kind == "note":
                 scratchpad = a.text
                 recent.append(f"note: {a.text[:40]}")
+                if a.text.upper().startswith("REPLAN"):
+                    want_replan = True  # agent-requested replan
                 continue
             if kind == "wait":
                 time.sleep(min(a.ms, _MAX_WAIT_MS) / 1000)
@@ -384,12 +395,21 @@ def execute(
                 res.invalid_actions += 1
                 _note_error(res, f"{_ACTION_DESC.get(kind, kind)} rejected: {e}")
                 recent.append(f"{kind}: REJECTED")
+                step_acted = True  # an attempted action that changed nothing still means stuck
 
         res.steps += 1
         _rec_step(recorder, full, _step, thought=thought, actions=actions,
                   usage=step_usage, raw=decision.raw, err=None,
                   frame_scale=frame_scale)
         acted_last_step = step_acted
+
+        if want_replan and replan_fn is not None and _step - last_replan_step >= _REPLAN_MIN_STEPS:
+            new_plan = replan_fn(recent)
+            if new_plan is not None:
+                plan = new_plan
+                res.replans += 1
+                recent.append("PLAN REVISED")
+            last_replan_step = _step
         if done:
             res.outcome = "claimed_done"
             break

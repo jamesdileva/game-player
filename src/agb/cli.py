@@ -71,6 +71,9 @@ def run(
     assist: str | None = typer.Option(
         None, "--assist", help="Override the task's assist level (L0 | L1 | L2)"
     ),
+    research: str | None = typer.Option(
+        None, "--research", help="Override the task's research mode (none | web | provided)"
+    ),
 ) -> None:
     """Run one task with one agent; prints a results row and persists the full run folder.
 
@@ -91,6 +94,14 @@ def run(
             typer.secho(f"--assist must be L0, L1 or L2, got {assist!r}", fg=typer.colors.RED)
             raise typer.Exit(1)
         spec.loop.assist_level = assist
+    if research is not None:
+        if research not in ("none", "web", "provided"):
+            typer.secho(
+                f"--research must be none, web or provided, got {research!r}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+        spec.research.mode = research
     adapter = get_adapter(spec.game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
@@ -126,6 +137,7 @@ def run(
     record = run_orchestrated(
         spec, build_agent(model), capture, kill, Path("runs"),
         launched=launched, view_max=(vw, vh), max_steps=max_steps,
+        research_mode=research,
     )
     result_row(record)
 

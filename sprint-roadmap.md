@@ -139,6 +139,17 @@ Tasks:
 
 **Risk:** Research quality varies a lot for weak models without tool calling. The harness-driven search loop is the fallback.
 
+### Sprint 3 results (2026-10-31, qwen2.5vl:3b, square task, n=1 per mode)
+
+| Mode | Outcome | Success | Steps | Invalid | Notes |
+|------|---------|---------|-------|---------|-------|
+| none | claimed_done | yes | 4 | 43% | brief from model knowledge |
+| provided | claimed_done | yes | 7 | 42% | human brief, zero research calls |
+| web | cap_steps | yes (adapter-verified) | 20 | 41% | model ran real DuckDuckGo searches for a game that does not exist on the web; burned steps, still hit the square |
+
+- All three modes ran on the same task with the mode recorded in the result; brief.md/plan.md saved per run; replans counted (and a replan-closure bug found by a live run, fixed, regression-tested).
+- Measurable difference: web mode wasted steps researching a nonexistent game (the risk the roadmap predicted), none and provided both completed efficiently. n=1, not a ranking.
+
 ---
 
 ## Sprint 4: Judge and task specs
@@ -328,6 +339,17 @@ Tasks:
 ---
 
 ## Task backlog (by tier)
+
+### Open item: testbed door task (from Sprint 1/2b findings)
+
+No local model has completed the door task (re-grounding after a state change + aim precision). Levers, mapped to where they fit:
+
+| Lever | Fits in |
+|-------|---------|
+| Hosted frontier reference model on the testbed tasks (ceiling data point; needs an API key) | Sprint 5 model matrix + a quick testbed re-run |
+| GUI-grounding-specialized local models (UI-TARS class) when they land in Ollama's library | Sprint 6 / Sprint A3 model ladder |
+| L2 OCR assist ablation (text blocks with coordinates) | Sprint 6 breadth/ablations |
+
 
 | Tier | Task | Notes |
 |------|------|-------|
