@@ -20,6 +20,7 @@ from agb.capture import WindowCapture, ensure_foreground
 from agb.inputs import WindowInput
 from agb.killswitch import KillSwitch
 from agb.models import TaskSpec
+from agb.perception import apply_assist
 
 DEFAULT_SETTLE_MS = 300
 DEFAULT_STUCK_PATIENCE = 5
@@ -94,9 +95,27 @@ def _scale_action(a, sx: float, sy: float):
     return a
 
 
+def _rec_step(recorder, frame, step, *, thought, actions, usage, raw, err, frame_scale) -> None:
+    """Persist one step record when a recorder is attached."""
+    if recorder is None:
+        return
+    recorder.log_step(
+        {
+            "phase": "execute",
+            "thought": thought,
+            "actions": [a.model_dump() for a in actions],
+            "usage": usage,
+            "raw_reply": raw,
+            "error": err,
+            "frame_scale": list(frame_scale) if frame_scale else None,
+        },
+        frame,
+    )
+
+
 @dataclass
 class LoopResult:
-    outcome: str  # claimed_done | cap_steps | cap_time | aborted | model_error
+    outcome: str  # claimed_done | cap_steps | cap_time | cap_cost | aborted | model_error | error
     steps: int = 0
     model_calls: int = 0
     invalid_outputs: int = 0  # model replies that failed tolerant parsing
@@ -160,6 +179,17 @@ def _note_error(res: LoopResult, msg: str) -> None:
         res.errors.append(msg)
 
 
+def _new_usage() -> dict:
+    return {"in_tokens": 0, "out_tokens": 0, "cost_usd": 0.0, "latency_ms": 0}
+
+
+def _add_usage(dst: dict, src: dict) -> None:
+    dst["in_tokens"] += int(src.get("in_tokens", 0) or 0)
+    dst["out_tokens"] += int(src.get("out_tokens", 0) or 0)
+    dst["cost_usd"] += float(src.get("cost_usd", 0.0) or 0.0)
+    dst["latency_ms"] += int(src.get("latency_ms", 0) or 0)
+
+
 def _call_agent(
     agent: Agent, system: str, user: str, images: list[bytes], res: LoopResult
 ) -> Decision | None:
@@ -189,8 +219,10 @@ def execute(
     inp: WindowInput,
     kill: KillSwitch,
     *,
+    recorder=None,
     max_steps: int | None = None,
     max_wall_minutes: float | None = None,
+    max_cost_usd: float | None = None,
     settle_ms: int = DEFAULT_SETTLE_MS,
     stuck_patience: int = DEFAULT_STUCK_PATIENCE,
 ) -> LoopResult:
@@ -200,6 +232,7 @@ def execute(
     wall_cap_s = (
         max_wall_minutes if max_wall_minutes is not None else limits.max_wall_minutes
     ) * 60
+    cost_cap = max_cost_usd if max_cost_usd is not None else limits.max_cost_usd
 
     res = LoopResult(outcome="cap_steps")
     scratchpad = ""
@@ -219,6 +252,9 @@ def execute(
         if time.perf_counter() - t_start >= wall_cap_s:
             res.outcome = "cap_time"
             break
+        if res.cost_usd >= cost_cap > 0:
+            res.outcome = "cap_cost"
+            break
 
         # The game must be foreground or the capture sees whatever covers it.
         if not capture.win.isActive:
@@ -226,9 +262,11 @@ def execute(
             time.sleep(0.2)
 
         _full, view, scale, _ts = capture.grab()
+        full = _full
+        model_view = apply_assist(view, task.loop.assist_level)  # L1+: gridded
 
         if frame_scale is None:
-            frame_scale = _calibrate_frame(agent, view, res)
+            frame_scale = _calibrate_frame(agent, model_view, res)
             res.frame_scale = frame_scale
 
         sample = _sample(view)
@@ -248,10 +286,17 @@ def execute(
         user = build_user_message(
             task.goal, scratchpad, recent, stuck=stuck_now, patience=stuck_patience
         )
-        jpeg = _jpeg(view)
+        if task.loop.assist_level in ("L1", "L2"):
+            user += (
+                f"\nThe screenshot has a labeled yellow coordinate grid "
+                f"(assist {task.loop.assist_level}); use the grid labels for precise coordinates."
+            )
+        jpeg = _jpeg(model_view)
         decision = _call_agent(agent, SYSTEM, user, [jpeg], res)
         if decision is None:
             consecutive_model_failures += 1
+            _rec_step(recorder, full, _step, thought="", actions=[], usage=_new_usage(),
+                      raw="", err="model call failed", frame_scale=frame_scale)
             if consecutive_model_failures >= _MAX_CONSECUTIVE_MODEL_FAILURES:
                 res.outcome = "model_error"
                 break
@@ -269,6 +314,8 @@ def execute(
             break
 
         thought, actions, err = parse_model_output(decision.raw)
+        step_usage = _new_usage()
+        _add_usage(step_usage, decision.usage)
         if err is not None:
             res.invalid_outputs += 1
             _note_error(res, err)
@@ -279,15 +326,21 @@ def execute(
             )
             decision = _call_agent(agent, SYSTEM, user2, [jpeg], res)
             if decision is None:
+                _rec_step(recorder, full, _step, thought="", actions=[], usage=step_usage,
+                          raw="", err="re-ask failed", frame_scale=frame_scale)
                 res.steps += 1
                 recent.append("(invalid output)")
                 acted_last_step = False
                 continue
+            _add_usage(step_usage, decision.usage)
             _accumulate(res, decision.usage)
             thought, actions, err = parse_model_output(decision.raw)
             if err is not None:
                 res.invalid_outputs += 1
                 _note_error(res, err)
+                _rec_step(recorder, full, _step, thought=thought, actions=[],
+                          usage=step_usage, raw=decision.raw, err=err,
+                          frame_scale=frame_scale)
                 res.steps += 1
                 recent.append("(invalid output)")
                 acted_last_step = False
@@ -333,6 +386,9 @@ def execute(
                 recent.append(f"{kind}: REJECTED")
 
         res.steps += 1
+        _rec_step(recorder, full, _step, thought=thought, actions=actions,
+                  usage=step_usage, raw=decision.raw, err=None,
+                  frame_scale=frame_scale)
         acted_last_step = step_acted
         if done:
             res.outcome = "claimed_done"

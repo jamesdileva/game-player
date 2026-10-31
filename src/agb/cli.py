@@ -1,8 +1,7 @@
-"""agb command line: capture-debugging helpers and the run command."""
+"""agb command line: run, replay, and capture-debugging helpers."""
 
 from __future__ import annotations
 
-import json
 import sys
 import time
 from pathlib import Path
@@ -38,6 +37,17 @@ def _open_capture(title: str, max_w: int = 1280, max_h: int = 720):
         return None
 
 
+def result_row(record: dict) -> None:
+    typer.echo(
+        f"{record['task_id']:<28} {record['model']:<12} {record['outcome']:<12} "
+        f"success={record['success']!s:<5} steps={record['steps']:<3} "
+        f"invalid={record['invalid_rate']:.0%} stuck={record['stuck_events']} "
+        f"avg_ms={record['avg_latency_ms']:.0f} "
+        f"tok={record['tokens_in']}/{record['tokens_out']} cost=${record['cost_usd']:.4f}"
+    )
+    typer.echo(f"artifacts: runs/{record['run_id']}")
+
+
 @app.command()
 def run(
     task: Path = typer.Argument(
@@ -58,8 +68,11 @@ def run(
         "--view-max",
         help="Max agent view WxH; smaller views = fewer vision tokens = faster local models",
     ),
+    assist: str | None = typer.Option(
+        None, "--assist", help="Override the task's assist level (L0 | L1 | L2)"
+    ),
 ) -> None:
-    """Run one task with one agent; prints a results row and writes runs/<id>/result.json.
+    """Run one task with one agent; prints a results row and persists the full run folder.
 
     The agent's done claim is never evidence (architecture 8): success comes
     from the game adapter's deterministic check, judged against the window
@@ -69,12 +82,15 @@ def run(
     from adapters import get_adapter
 
     from agb.config import build_agent
-    from agb.inputs import WindowInput
     from agb.killswitch import KillSwitch
-    from agb.loop import execute
     from agb.models import load_task_spec
 
     spec = load_task_spec(task)
+    if assist is not None:
+        if assist not in ("L0", "L1", "L2"):
+            typer.secho(f"--assist must be L0, L1 or L2, got {assist!r}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        spec.loop.assist_level = assist
     adapter = get_adapter(spec.game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
@@ -105,56 +121,25 @@ def run(
         )
         raise typer.Exit(1)
 
-    try:
-        agent = build_agent(model)
-        result = execute(
-            spec, agent, capture, WindowInput(capture), kill, max_steps=max_steps
-        )
-        # read the game state while the window is still alive (the game adapter
-        # reads progress from the window title)
-        state = adapter.read_state(capture.win.title)
-        success = adapter.check_success(spec, state)
-    finally:
-        if launched is not None:
-            launched.terminate()
+    from agb.orchestrator import run as run_orchestrated
 
-    run_id = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
-    run_dir = Path("runs") / f"{run_id}_{spec.id}_{model}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    record = {
-        "run_id": run_dir.name,
-        "task_id": spec.id,
-        "model": model,
-        "agent_mode": "A",
-        "assist_level": spec.loop.assist_level,
-        "time_mode": spec.loop.time_mode,
-        "outcome": result.outcome,
-        "success": success,
-        "adapter_state": state,
-        "steps": result.steps,
-        "model_calls": result.model_calls,
-        "invalid_outputs": result.invalid_outputs,
-        "invalid_rate": round(result.invalid_rate, 3),
-        "invalid_actions": result.invalid_actions,
-        "stuck_events": result.stuck_events,
-        "wall_seconds": round(result.wall_seconds, 1),
-        "tokens_in": result.tokens_in,
-        "tokens_out": result.tokens_out,
-        "cost_usd": round(result.cost_usd, 6),
-        "avg_latency_ms": round(result.avg_latency_ms),
-        "errors": result.errors,
-        "raw_samples": result.raw_samples,
-        "frame_scale": result.frame_scale,
-    }
-    (run_dir / "result.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
-
-    typer.echo(
-        f"{spec.id:<28} {model:<12} {result.outcome:<12} success={success!s:<5} "
-        f"steps={result.steps:<3} invalid={result.invalid_rate:.0%} "
-        f"stuck={result.stuck_events} avg_ms={record['avg_latency_ms']:.0f} "
-        f"tok={result.tokens_in}/{result.tokens_out} cost=${result.cost_usd:.4f}"
+    record = run_orchestrated(
+        spec, build_agent(model), capture, kill, Path("runs"),
+        launched=launched, view_max=(vw, vh), max_steps=max_steps,
     )
-    typer.echo(f"artifacts: {run_dir / 'result.json'}")
+    result_row(record)
+
+
+@app.command()
+def replay(run_dir: Path = typer.Argument(..., exists=True, file_okay=False)) -> None:
+    """Generate (if needed) and open a run's replay page in the browser."""
+    from agb.replay import generate
+
+    page = generate(run_dir)
+    import webbrowser
+
+    webbrowser.open(page.resolve().as_uri())
+    typer.echo(f"replay: {page}")
 
 
 if __name__ == "__main__":

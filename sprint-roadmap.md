@@ -9,6 +9,7 @@ Companion to `architecture.md` and `implementation-guide.md`. Sprints are sized 
 | 0 | Foundations | Repo, models, fake game, capture + input working |
 | 1 | Core loop | A model completes a trivial task in the fake game |
 | 2 | Recording and caps | Every run is fully logged, capped, and killable |
+| 2b | L1 grid assist | Labeled coordinate grid on the agent's view; L0-vs-L1 retest |
 | 3 | Research and planning | Brief and plan phases, with ablation switch |
 | 4 | Judge and task specs | Automated success verdicts, calibrated against humans |
 | 5 | First real game | OSRS "kill a goblin" runs across multiple models |
@@ -101,6 +102,25 @@ Tasks:
 
 ---
 
+## Sprint 2b: L1 grid assist
+
+**Goal:** Attack the aim bias documented in Sprint 1 with the architecture's designed fix (5.6).
+
+Tasks:
+- `perception.py`: labeled grid overlay applied to the agent's view only (recorder keeps clean frames for the judge).
+- `--assist L0|L1|L2` CLI override defaulting from the task spec; assist level recorded per run.
+- Retest: door task, qwen2.5vl:3b, L0 vs L1 (n=1 each).
+
+**Exit criteria:** Both runs recorded; the L1 run's clicks measurably closer to the target than the L0 run's (or the finding documented either way).
+
+### Sprint 2b results (2026-10-31, qwen2.5vl:3b, door task, n=1 each)
+
+- L0: 20 steps, 73% invalid, 14 clicks all in one degenerate cluster (~172 px from the square).
+- L1: 21 steps, 48% invalid, 23 clicks with real spread and the only click that ever came near the door (83 px). No completion at n=1.
+- Verdict: L1 measurably breaks the degenerate aim fixation and improves output validity, but does not close the re-grounding capability gap for this model class. Both runs are fully recorded (steps.jsonl + frames + run.mp4 + replay.html).
+
+---
+
 ## Sprint 3: Research and planning
 
 **Goal:** Add the novel phases from the original idea.
@@ -120,6 +140,8 @@ Tasks:
 **Risk:** Research quality varies a lot for weak models without tool calling. The harness-driven search loop is the fallback.
 
 ---
+
+## Sprint 4: Judge and task specs
 
 ## Sprint 4: Judge and task specs
 

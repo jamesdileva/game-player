@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -10,6 +11,22 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 load_dotenv()  # reads .env if present; never overrides real environment variables
+
+_SK_PATTERN = re.compile(r"sk-[A-Za-z0-9_\-]{8,}")
+
+
+def redact(text: str) -> str:
+    """Scrub API-key-shaped strings and known secret env values before saving.
+
+    Applied to anything written to disk (prompts, raw replies, logs).
+    """
+    if not text:
+        return text
+    text = _SK_PATTERN.sub("sk-***REDACTED***", text)
+    for name, val in os.environ.items():
+        if re.search(r"KEY|TOKEN|SECRET", name) and val and len(val) >= 8 and val in text:
+            text = text.replace(val, f"***REDACTED:{name}***")
+    return text
 
 
 def ensure_dpi_awareness() -> None:
