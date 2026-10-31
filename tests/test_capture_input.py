@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from agb.capture import WindowCapture, WindowNotFoundError
+from agb.capture import WindowCapture, WindowNotFoundError, ensure_foreground
 from agb.inputs import InputRejected, WindowInput
 
 pytestmark = pytest.mark.ui
@@ -33,17 +33,13 @@ def _red_centroid(img):
 
 def _round_trip_click(win):
     """Capture -> ground truth -> coordinate mapping -> click -> verify the hit."""
+    ensure_foreground(win)
+    time.sleep(0.2)
     cap = WindowCapture("FakeGame")
     inp = WindowInput(cap)
     full, _, scale, _ = cap.grab()
     wx, wy = _red_centroid(full)
     ax, ay = wx * scale, wy * scale  # window px -> agent view px
-
-    try:
-        win.activate()
-    except Exception:
-        pass  # focus stealing can be blocked; the click still lands under the cursor
-    time.sleep(0.2)
 
     inp.click(ax, ay, scale)
 
@@ -61,7 +57,9 @@ class TestCapture:
     def test_grab_downscales_and_returns_scale(self, fakegame):
         cap = WindowCapture("FakeGame", max_w=640, max_h=480)
         full, view, scale, ts = cap.grab()
-        assert full.width == fakegame.width and full.height == fakegame.height
+        # capture is the CLIENT area: the configured 800x600 game surface,
+        # not the 816x639 outer window rect (decorations excluded)
+        assert (full.width, full.height) == (800, 600)
         assert view.width <= 640 and view.height <= 480
         expected = min(640 / full.width, 480 / full.height, 1.0)
         assert abs(scale - expected) < 1e-6

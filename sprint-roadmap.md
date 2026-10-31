@@ -65,6 +65,21 @@ Tasks:
 
 **Deliverable:** First tiny results table, even if it only proves the loop.
 
+### Sprint 1 results (2026-10-31, local Ollama models, n=1 each)
+
+| Task | Model | Outcome | Success | Steps | Invalid | Avg ms/call |
+|------|-------|---------|---------|-------|---------|-------------|
+| square | qwen2.5vl:3b | claimed_done | **yes** (3 of 4 runs) | 2-3 | 0-20% | 1.4k-43k |
+| square | qwen3-vl:2b | cap_steps | no | 20 | 40% | 30.8k |
+| square | qwen3.5:4b | cap_steps | no | 20 | 0% | 7.8k |
+| square | qwen3.5:9b | cap_time | no | 5 | 62% | 124.9k |
+| door | all four models | cap | **no** (9 attempts) | 20-40 | 2-66% | 7.8k-42k |
+
+Findings:
+- **Harness validated end-to-end**: calibrated clicks land within ±5 px of the true target across window moves; out-of-window and cursor-verification refusals all correct. Twelve integration quirks found and fixed through live model contact (prompt notation contract, function-call/string/float/pair coordinate tolerance, frame calibration assist, multi-object reply merging, native-Ollama client for `think:false`, state-read-before-terminate, and more).
+- **Model capability boundary (the benchmark working as intended):** qwen2.5vl:3b localizes precisely (±5 px) but cannot re-ground to a new target after a state change (door task, 9 attempts); qwen3.5:4b reads the HUD and plans correctly but its aim carries a systematic ~25 px bias below the target; qwen3-vl:2b guesses its coordinate frame; thinking modes are not disabled by `think:false` for qwen3-vl (works for qwen3.5 via the native API). Consistent with published grounding research: coordinate grounding is the weakest skill of current VLMs.
+- **OPEN ITEM (exit criterion 1, "both tasks"):** no local model completed the door task. Next levers, in order: (a) L1 grid overlay (already designed, attacks aim bias directly), (b) a hosted frontier reference model as the ceiling data point, (c) a GUI-grounding-specialized model (UI-TARS class) if one lands in Ollama's library.
+
 ---
 
 ## Sprint 2: Recording and caps

@@ -1,0 +1,42 @@
+# Model profiles for `agb run --model <name>`.
+# Prices are USD per MILLION tokens (cost accounting only; local models are 0).
+# API keys are read from the env var named by api_key_env - never put keys in this file.
+# To add a hosted frontier reference later, add a profile with its OpenRouter/vendor
+# base_url, model id, api_key_env, and prices.
+profiles:
+  qwen35-9b:
+    base_url: http://localhost:11434/v1
+    model: qwen3.5:9b
+    price_in: 0.0
+    price_out: 0.0
+    timeout: 300.0
+    max_tokens: 1500  # thinking burns tokens; truncation breaks parsing
+    extra_body:
+      think: false
+    calibrate_frame: true
+  qwen35-4b:
+    base_url: http://localhost:11434/v1
+    model: qwen3.5:4b
+    price_in: 0.0
+    price_out: 0.0
+    timeout: 300.0
+    max_tokens: 3000  # thinking must fully fit or calibration truncates to empty
+    native_ollama: true  # /api/chat honors think:false; the OpenAI layer does not
+    calibrate_frame: true  # without it every click lands outside the view
+  qwen25vl-3b:
+    base_url: http://localhost:11434/v1
+    model: qwen2.5vl:3b
+    price_in: 0.0
+    price_out: 0.0
+    timeout: 300.0
+    max_tokens: 700  # multi-object plans truncate at 400
+    calibrate_frame: true  # reports coords in its internal ~1024x768 frame
+  qwen3vl-2b:
+    base_url: http://localhost:11434/v1
+    model: qwen3-vl:2b
+    price_in: 0.0
+    price_out: 0.0
+    timeout: 300.0
+    max_tokens: 3000  # think:false is not honored for this model; thinking needs room
+    native_ollama: true  # OpenAI path degenerates; native + think:false yields clean JSON
+    calibrate_frame: true  # grounding-trained, but it guesses the frame: measure it

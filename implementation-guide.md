@@ -457,8 +457,11 @@ success rate, median/IQR steps, median wall time, median cost, failure-category 
 
 - **DPI scaling** shifting click positions. Fix with `ctypes.windll.shcore.SetProcessDpiAwareness(2)`.
 - **Black captures** from exclusive fullscreen or protected content. Use windowed/borderless.
+- **Window decorations offset.** A windowed game's outer rect (816x639 for an 800x600 client) includes the title bar and borders. Capture and click-map the CLIENT area (`GetClientRect` + `ClientToScreen`), or every coordinate is offset by the decorations and the agent can click the title bar and drag the window.
+- **Occluded captures.** The capture grabs the screen region at the window rect, so any window overlapping the game pollutes frames and breaks frame-diff stuck detection. Bring the game to the foreground at run start and re-check focus each step.
+- **Injected input silently swallowed.** A live human mouse overrides synthetic moves, and UIPI drops injected input while an elevated window is foreground. Verify the cursor actually reached the target (`GetCursorPos`) before every click and refuse the action otherwise — a stray click lands in whatever app the cursor is really over.
 - **Games ignoring injected input.** Try DirectInput scancodes, run the harness as administrator, or use an emulator.
 - **Agent clicking before the screen updates.** Add a short settle delay (e.g., 300 ms) after actions before the next capture.
-- **Weak-model JSON failures.** Keep the schema small, show one example, and limit to 1-3 actions per turn.
+- **Weak-model JSON failures.** Keep the schema small, show one example, and limit to 1-3 actions per turn. Expect function-call syntax (`click(430, 330)`) and string/float coordinates (`"x": "430"`) regardless of the prompt contract — the tolerant parser coerces both and counts what remains.
 - **Cost surprises.** Enforce `max_cost_usd`, downscale frames, and send only the last few frames.
 - **Judge leakage.** Never let the judge see agent thoughts or the done claim as evidence.

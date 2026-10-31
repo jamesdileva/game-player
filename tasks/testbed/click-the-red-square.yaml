@@ -11,7 +11,7 @@ success:
   verifiers: [scripted]
 limits:
   max_steps: 20
-  max_wall_minutes: 5
+  max_wall_minutes: 20  # generous for local models (thinking tokens are slow)
   max_cost_usd: 0.0
 research:
   mode: none

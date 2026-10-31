@@ -1,0 +1,20 @@
+id: testbed-reach-door-001
+game: fakegame
+title: Reach the door
+goal: "Click the red square three times to reveal the door, then click the door."
+tier: 1
+mode: study
+start_state: >
+  The fake game window (800x600) is open at stage 1. A red square is visible.
+success:
+  evidence: "The door has been clicked: the window title shows stage 3 or higher."
+  verifiers: [scripted]
+limits:
+  max_steps: 40
+  max_wall_minutes: 20  # generous for local models (thinking tokens are slow)
+  max_cost_usd: 0.0
+research:
+  mode: none
+loop:
+  time_mode: realtime
+  assist_level: L0
