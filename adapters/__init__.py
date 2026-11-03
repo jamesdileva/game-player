@@ -24,6 +24,10 @@ def get_adapter(game: str) -> GameAdapter:
         from . import fakegame
 
         return fakegame
+    if game == "osrs":
+        from . import osrs
+
+        return osrs
     raise KeyError(
         f"No adapter for game {game!r}. Add one under adapters/ for new games."
     )

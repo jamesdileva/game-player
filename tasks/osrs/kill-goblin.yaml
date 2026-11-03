@@ -1,0 +1,36 @@
+id: osrs-kill-goblin-001
+game: osrs
+title: Kill one goblin
+goal: "Attack and kill one goblin."
+tier: 1
+mode: study
+start_state: >
+  Logged in on a throwaway F2P account (human does the login). Character is
+  parked in the goblin area east of Lumbridge. Windowed FIXED layout, stable
+  size. Baseline snapshot is taken by the harness before the run.
+success:
+  evidence: >
+    A combat XP drop is visible near the XP counter after the goblin is
+    attacked, and the goblin's health bar reaches zero or the goblin death
+    animation is visible. A single kill is sufficient.
+  evidence_step: >
+    After the kill, open the Skills tab so the increased Attack/Hitpoints XP
+    totals are visible.
+  verifiers: [vlm]
+  milestones:
+    - name: goblin targeted
+      check: "the goblin is highlighted as the current target (combat options or yellow X)"
+    - name: xp drop seen
+      check: "an XP drop appears near the XP counter"
+    - name: kill confirmed
+      check: "the goblin dies (health bar empty / death animation)"
+limits:
+  max_steps: 60
+  max_wall_minutes: 20
+  max_cost_usd: 0.0
+research:
+  mode: web
+  max_minutes: 10
+loop:
+  time_mode: realtime
+  assist_level: L0

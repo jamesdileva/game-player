@@ -48,6 +48,60 @@ def result_row(record: dict) -> None:
     )
     typer.echo(f"artifacts: runs/{record['run_id']}")
 
+FAILURE_CATEGORIES = (
+    "research_wrong", "plan_infeasible", "perception", "grounding",
+    "navigation_lost", "stuck_loop", "ui_modal", "timing", "premature_done",
+    "budget", "precision", "none",
+)
+
+
+def _prepare_capture(adapter, window_title: str | None, launch: bool, vw: int, vh: int):
+    """Find (or launch) the game window; returns (capture, launched_process)."""
+    title = window_title or adapter.WINDOW_TITLE
+    launched = None
+    if launch:
+        adapter.close_all()  # hermetic runs: no stale game state
+    capture = _open_capture(title, vw, vh)
+    if capture is None and launch:
+        launched = adapter.launch()
+        deadline = time.time() + 20
+        while capture is None and time.time() < deadline:
+            time.sleep(0.3)
+            capture = _open_capture(title, vw, vh)
+    return capture, launched
+
+
+def _apply_task_overrides(spec, assist: str | None, research: str | None):
+    if assist is not None:
+        if assist not in ("L0", "L1", "L2"):
+            typer.secho(f"--assist must be L0, L1 or L2, got {assist!r}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        spec.loop.assist_level = assist
+    if research is not None:
+        if research not in ("none", "web", "provided"):
+            typer.secho(
+                f"--research must be none, web or provided, got {research!r}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+        spec.research.mode = research
+
+
+def summarize_matrix(records: list[dict]) -> str:
+    """Per-model aggregate lines for a matrix batch."""
+    by_model: dict[str, list[dict]] = {}
+    for r in records:
+        by_model.setdefault(r["model"], []).append(r)
+    lines = ["model           runs successes mean_steps mean_invalid mean_ms"]
+    for model, rs in by_model.items():
+        n = len(rs)
+        succ = sum(1 for r in rs if r["success"])
+        steps = sum(r["steps"] for r in rs) / n
+        inv = sum(r["invalid_rate"] for r in rs) / n
+        ms = sum(r["avg_latency_ms"] for r in rs) / n
+        lines.append(f"{model:<15} {n:>4} {succ:>9} {steps:>10.1f} {inv:>11.0%} {ms:>7.0f}")
+    return chr(10).join(lines)
+
 
 @app.command()
 def run(
@@ -93,19 +147,7 @@ def run(
     from agb.models import load_task_spec
 
     spec = load_task_spec(task)
-    if assist is not None:
-        if assist not in ("L0", "L1", "L2"):
-            typer.secho(f"--assist must be L0, L1 or L2, got {assist!r}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-        spec.loop.assist_level = assist
-    if research is not None:
-        if research not in ("none", "web", "provided"):
-            typer.secho(
-                f"--research must be none, web or provided, got {research!r}",
-                fg=typer.colors.RED,
-            )
-            raise typer.Exit(1)
-        spec.research.mode = research
+    _apply_task_overrides(spec, assist, research)
     adapter = get_adapter(spec.game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
@@ -118,20 +160,11 @@ def run(
         typer.secho("Kill switch failed to arm; refusing to run.", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-    title = window_title or adapter.WINDOW_TITLE
-    launched = None
-    if launch:
-        adapter.close_all()  # hermetic runs: no stale game state
-    capture = _open_capture(title, vw, vh)
-    if capture is None and launch:
-        launched = adapter.launch()
-        deadline = time.time() + 20
-        while capture is None and time.time() < deadline:
-            time.sleep(0.3)
-            capture = _open_capture(title, vw, vh)
+    capture, launched = _prepare_capture(adapter, window_title, launch, vw, vh)
     if capture is None:
         typer.secho(
-            f"No window matching {title!r}. Open the game first or pass --launch.",
+            f"No window matching {window_title or adapter.WINDOW_TITLE!r}. "
+            "Open the game first or pass --launch.",
             fg=typer.colors.RED,
         )
         raise typer.Exit(1)
@@ -148,17 +181,90 @@ def run(
 
 
 @app.command()
+def matrix(
+    task: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
+    models: str = typer.Option(..., "--models", help="Comma-separated model profile names"),
+    runs_per_model: int = typer.Option(3, "--runs", min=1, help="Runs per model"),
+    max_steps: int | None = typer.Option(None, min=1),
+    window_title: str | None = typer.Option(None),
+    launch: bool = typer.Option(False, "--launch"),
+    view_max: str = typer.Option("640x480", "--view-max"),
+    assist: str | None = typer.Option(None, "--assist"),
+    research: str | None = typer.Option(None, "--research"),
+    judge: str | None = typer.Option(None, "--judge"),
+) -> None:
+    """Run the same task across several models sequentially; prints a batch table.
+
+    Runs are NOT ranked at n < 5 (architecture 9.2). For --launch games the
+    window is reused across runs; game state persists between them.
+    """
+    ensure_dpi_awareness()
+    from adapters import get_adapter
+
+    from agb.config import build_agent
+    from agb.killswitch import KillSwitch
+    from agb.models import load_task_spec
+    from agb.orchestrator import run as run_orchestrated
+
+    _apply_task_overrides(load_task_spec(task), assist, research)  # validates early
+    adapter = get_adapter(load_task_spec(task).game)
+    try:
+        vw, vh = (int(v) for v in view_max.lower().split("x"))
+    except ValueError:
+        typer.secho(f"--view-max must be WxH, got {view_max!r}", fg=typer.colors.RED)
+        raise typer.Exit(1) from None
+
+    kill = KillSwitch()
+    if not kill.armed:
+        typer.secho("Kill switch failed to arm; refusing to run.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    capture, launched = _prepare_capture(adapter, window_title, launch, vw, vh)
+    if capture is None:
+        typer.secho(
+            f"No window matching {window_title or adapter.WINDOW_TITLE!r}. "
+            "Open the game first or pass --launch.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    judge_agent = build_agent(judge) if judge else None
+    model_names = [m.strip() for m in models.split(",") if m.strip()]
+    records = []
+    for model in model_names:
+        for n in range(runs_per_model):
+            typer.echo(f"--- matrix: {model} run {n + 1}/{runs_per_model}")
+            spec = load_task_spec(task)  # fresh spec per run
+            _apply_task_overrides(spec, assist, research)
+            record = run_orchestrated(
+                spec, build_agent(model), capture, kill, Path("runs"),
+                launched=launched, view_max=(vw, vh), max_steps=max_steps,
+                research_mode=research, judge_agent=judge_agent,
+            )
+            result_row(record)
+            records.append(record)
+    typer.echo(summarize_matrix(records))
+
+
+@app.command()
 def label(
     run_dir: Path = typer.Argument(..., exists=True, file_okay=False),
     verdict: str = typer.Argument(..., help="Human verdict: success | partial | fail"),
+    category: str = typer.Option(
+        "none", "--category", help=f"Failure category: {', '.join(FAILURE_CATEGORIES)}"
+    ),
 ) -> None:
     """Append a human label to the run's labels.jsonl (ground truth for calibration)."""
     if verdict not in ("success", "partial", "fail"):
         typer.secho("verdict must be success, partial or fail", fg=typer.colors.RED)
         raise typer.Exit(1)
+    if category not in FAILURE_CATEGORIES:
+        typer.secho(f"unknown category {category!r}", fg=typer.colors.RED)
+        raise typer.Exit(1)
     entry = {
         "run_id": run_dir.name,
         "human": verdict,
+        "category": category,
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()),
     }
     with open(run_dir / "labels.jsonl", "a", encoding="utf-8") as f:
