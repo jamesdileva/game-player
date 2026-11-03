@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))  # run with
 SQUARE_SIZE = 60
 DOOR = (60, 60, 80, 160)  # x, y, w, h
 ENEMY = (600, 420, 48, 48)
+DECOY = (150, 400, 60, 60)  # judge-fooling: red OUTLINE, clicking it does nothing
 
 
 def _inside(x: int, y: int, rect: tuple[int, int, int, int]) -> bool:
@@ -67,7 +68,10 @@ class FakeGameState:
         return event
 
 
-def run(width: int, height: int, square_xy: tuple[int, int], hits_needed: int) -> None:
+def run(
+    width: int, height: int, square_xy: tuple[int, int], hits_needed: int,
+    decoy: bool = False,
+) -> None:
     import pygame  # imported here so FakeGameState stays importable headless
 
     from agb.config import ensure_dpi_awareness
@@ -103,6 +107,9 @@ def run(width: int, height: int, square_xy: tuple[int, int], hits_needed: int) -
         screen.fill(colors["bg"])
         if state.stage >= 1:
             pygame.draw.rect(screen, colors["square"], state.square_rect)
+        if decoy:
+            # judge-fooling near-miss: looks clickable, does nothing
+            pygame.draw.rect(screen, colors["square"], DECOY, width=3)
         if state.stage >= 2:
             pygame.draw.rect(screen, colors["door"], DOOR)
         if state.stage >= 3:
@@ -121,10 +128,11 @@ def main() -> None:
     p.add_argument("--size", default="800x600", help="window size, e.g. 800x600")
     p.add_argument("--square", default="400,300", help="red square top-left, e.g. 400,300")
     p.add_argument("--hits", type=int, default=3, help="hits needed to clear stage 1")
+    p.add_argument("--decoy", action="store_true", help="draw a non-functional red outline decoy")
     args = p.parse_args()
     w, h = (int(v) for v in args.size.split("x"))
     sx, sy = (int(v) for v in args.square.split(","))
-    run(w, h, (sx, sy), args.hits)
+    run(w, h, (sx, sy), args.hits, decoy=args.decoy)
 
 
 if __name__ == "__main__":

@@ -88,10 +88,18 @@ def parse_actions(raw: list[dict[str, Any]]) -> list[Action]:
 # --- Task spec (architecture.md 7.1) -----------------------------------------
 
 
+class Milestone(BaseModel):
+    """Partial-credit checkpoint, scored by the judge like the main evidence."""
+
+    name: str
+    check: str
+
+
 class SuccessConfig(BaseModel):
     evidence: str
     evidence_step: str | None = None
     verifiers: list[str] = ["vlm"]
+    milestones: list[Milestone] = Field(default_factory=list)
 
 
 class Limits(BaseModel):

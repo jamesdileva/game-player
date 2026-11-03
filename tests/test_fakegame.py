@@ -30,6 +30,23 @@ class TestStage1Square:
         assert s.events[-1] == "stage_door"
 
 
+class TestDecoy:
+    """Judge-fooling near-miss: the decoy looks clickable but does nothing."""
+
+    def test_decoy_click_is_ignored(self):
+        from testbed.fakegame import DECOY, FakeGameState
+
+        s = FakeGameState(hits_needed=1)
+        assert s.register_click(*_center(DECOY)) is None
+        assert s.hits == 0 and s.stage == 1  # no event, no hits
+
+    def test_square_still_works_with_decoy_present(self):
+        from testbed.fakegame import FakeGameState
+
+        s = FakeGameState(hits_needed=1)
+        assert s.register_click(*_center(s.square_rect)) == "stage_door"
+
+
 class TestStage2Door:
     def test_door_click_advances(self):
         s = FakeGameState(hits_needed=1)

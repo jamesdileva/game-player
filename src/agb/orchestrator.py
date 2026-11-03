@@ -58,6 +58,7 @@ def run(
     view_max: tuple[int, int] = (640, 480),
     max_steps: int | None = None,
     research_mode: str | None = None,
+    judge_agent=None,
 ) -> dict[str, Any]:
     """Execute one task with one agent and persist the full run folder.
 
@@ -70,6 +71,14 @@ def run(
     run_dir = make_run_dir(runs_root, spec, agent.name)
     recorder = Recorder(run_dir)
     recorder.start_video(capture.rect())
+
+    # baseline snapshot (architecture 6 step 0): the judge compares before/after
+    try:
+        baseline_full, _v, _s, _t = capture.grab()
+        baseline_full.save(run_dir / "baseline.jpg", "JPEG", quality=85)
+    except Exception:
+        pass
+
     result: LoopResult | None = None
     error: str | None = None
     state: dict = {}
@@ -79,6 +88,8 @@ def run(
     research_usage: dict = {"in_tokens": 0, "out_tokens": 0}
     plan_usage: dict = {"in_tokens": 0, "out_tokens": 0}
     research_error = None
+    verifiers: list[str] = []
+    verdict_record: dict[str, Any] | None = None
     try:
         # RESEARCH phase (architecture 6 step 1)
         mode = research_mode or spec.research.mode
@@ -108,6 +119,28 @@ def run(
         # adapter reads progress from the window title)
         state = adapter.read_state(capture.win.title)
         success = adapter.check_success(spec, state)
+
+        # JUDGE phase (architecture 6 step 5): adapter verifier + optional VLM
+        adapter_verdict = adapter.verify(spec, state) if hasattr(adapter, "verify") else None
+        if adapter_verdict is not None:
+            verifiers.append(adapter_verdict["verifier"])
+        if judge_agent is not None:
+            from agb.judge import judge_run
+
+            v = judge_run(run_dir, spec, judge_agent, verifiers=verifiers + ["vlm"])
+            verdict_record = {
+                "verdict": v.verdict,
+                "confidence": v.confidence,
+                "cited_frames": v.cited_frames,
+                "reasoning": v.reasoning,
+                "milestones": v.milestones,
+                "agreement": v.agreement,
+                "judge": getattr(judge_agent, "name", "unknown"),
+                "self_judged": getattr(judge_agent, "name", "") == getattr(agent, "name", "?"),
+                "error": v.error,
+            }
+            if "vlm" not in verifiers:
+                verifiers.append("vlm")
     except Exception as e:  # a crashed run still writes its partial result
         error = f"{type(e).__name__}: {e}"
     finally:
@@ -131,6 +164,9 @@ def run(
         "plan_tokens_in": plan_usage.get("in_tokens", 0),
         "plan_tokens_out": plan_usage.get("out_tokens", 0),
         "replans": result.replans if result else 0,
+        "evidence_steps_used": result.evidence_steps_used if result else 0,
+        "verifiers": verifiers if (result or verdict_record) else [],
+        "verdict": verdict_record,
         "view_max": list(view_max),
         "outcome": result.outcome if result else "error",
         "success": success,

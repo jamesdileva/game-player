@@ -96,13 +96,16 @@ def _scale_action(a, sx: float, sy: float):
     return a
 
 
-def _rec_step(recorder, frame, step, *, thought, actions, usage, raw, err, frame_scale) -> None:
+def _rec_step(
+    recorder, frame, step, *, phase="execute", thought, actions, usage,
+    raw, err, frame_scale,
+) -> None:
     """Persist one step record when a recorder is attached."""
     if recorder is None:
         return
     recorder.log_step(
         {
-            "phase": "execute",
+            "phase": phase,
             "thought": thought,
             "actions": [a.model_dump() for a in actions],
             "usage": usage,
@@ -131,6 +134,7 @@ class LoopResult:
     raw_samples: list[str] = field(default_factory=list)  # first N raw replies
     frame_scale: tuple[float, float] | None = None  # measured model coordinate frame
     replans: int = 0
+    evidence_steps_used: int = 0
     scratchpad: str = ""
 
     @property
@@ -229,6 +233,7 @@ def execute(
     max_cost_usd: float | None = None,
     settle_ms: int = DEFAULT_SETTLE_MS,
     stuck_patience: int = DEFAULT_STUCK_PATIENCE,
+    evidence_steps: int = 3,
 ) -> LoopResult:
     """Run the EXECUTE phase. Returns a LoopResult; judging happens elsewhere."""
     limits = task.limits
@@ -248,6 +253,9 @@ def execute(
     wants_calibration = getattr(agent, "frame_calibration", False)
     frame_scale: tuple[float, float] | None = (1.0, 1.0) if not wants_calibration else None
     last_replan_step = -_REPLAN_MIN_STEPS
+    done_claimed = False
+    done_claimed = False
+    evidence_left: int | None = None  # None = normal execution; int = evidence turn
     t_start = time.perf_counter()
 
     for _step in range(steps_cap):
@@ -290,9 +298,22 @@ def execute(
 
         want_replan = stuck_now  # a stuck event requests a replan (throttled below)
 
+        # evidence turn termination: the budget ran out after a done claim
+        if done_claimed and evidence_left is not None and evidence_left <= 0:
+            res.outcome = "claimed_done"
+            break
+
         user = build_user_message(
             task.goal, scratchpad, recent, stuck=stuck_now, patience=stuck_patience
         )
+        phase = "execute"
+        if evidence_left is not None:
+            phase = "evidence"
+            user += (
+                "\n\nYou claimed the goal is done. EVIDENCE TURN: show the proof on "
+                "screen now (open the screen, counter or inventory that demonstrates "
+                "it). Do not claim done again."
+            )
         if plan is not None:
             user += f"\n\nPLAN (do these in order):\n{plan.render()}"
         if task.loop.assist_level in ("L1", "L2"):
@@ -398,10 +419,22 @@ def execute(
                 step_acted = True  # an attempted action that changed nothing still means stuck
 
         res.steps += 1
-        _rec_step(recorder, full, _step, thought=thought, actions=actions,
+        _rec_step(recorder, full, _step, phase=phase, thought=thought, actions=actions,
                   usage=step_usage, raw=decision.raw, err=None,
                   frame_scale=frame_scale)
         acted_last_step = step_acted
+
+        if done:
+            if not done_claimed:
+                done_claimed = True
+                evidence_left = evidence_steps  # begin the capped evidence turn
+                recent.append("CLAIMED DONE - evidence turn")
+        if done_claimed and not done and evidence_left is not None:
+            evidence_left -= 1
+            res.evidence_steps_used += 1
+            if evidence_left <= 0:
+                res.outcome = "claimed_done"
+                break
 
         if want_replan and replan_fn is not None and _step - last_replan_step >= _REPLAN_MIN_STEPS:
             new_plan = replan_fn(recent)
@@ -410,9 +443,6 @@ def execute(
                 res.replans += 1
                 recent.append("PLAN REVISED")
             last_replan_step = _step
-        if done:
-            res.outcome = "claimed_done"
-            break
         recent.append(_describe(actions, step_acted))
         time.sleep(settle_ms / 1000)
 

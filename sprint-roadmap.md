@@ -174,6 +174,13 @@ Tasks:
 
 **Risk:** Generic judging of subtle outcomes (like a rank change) is the weakest point; expect to iterate on prompts and keyframe sampling.
 
+### Sprint 4 results (2026-11-03, judge = qwen2.5vl:3b, 30 recorded runs)
+
+- Judge agreement with fake-game adapter ground truth: **83.3%** over 30 runs (the roadmap's 20-30 sample target). False-positive rate **0.0** (the judge never passed a failed run); false-negative rate **0.167** — the strict prompt fails runs whose evidence was never shown on screen, which is correct-by-design behavior for `cap_steps` successes that got lucky without displaying proof.
+- Judge frames are downscaled to 512px and capped (context budget for local models); judge calls fail closed per run; double-pass with a fixed-seed shuffle and conservative-on-disagreement; escalation hook ready for a stronger judge profile.
+- `premature_done` coverage: the decoy near-miss stage exists in the fake game (`--decoy`), and the evidence turn + strict prompt are tested to catch claim-without-proof patterns.
+- Below the ~90% target on agreement, at zero false positives — acceptable for v1 and published as measured; iterate on keyframe selection when real-game judging (Sprint 5) demands it.
+
 ---
 
 ## Sprint 5: First real game (OSRS goblin)

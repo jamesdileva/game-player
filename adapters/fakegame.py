@@ -76,3 +76,19 @@ def check_success(task: TaskSpec, state: dict[str, Any]) -> bool:
     if task.id == "testbed-reach-door-001":
         return (state["stage"] or 0) >= 3
     return False
+
+
+def verify(task: TaskSpec, state: dict[str, Any]) -> dict[str, Any] | None:
+    """Deterministic verifier hook (architecture 8.2): ground truth from the title.
+
+    Returns a verdict dict the orchestrator records verbatim, or None when the
+    adapter has no deterministic check for this task.
+    """
+    if state.get("stage") is None:
+        return None  # window title unreadable: no deterministic verdict
+    return {
+        "verdict": "success" if check_success(task, state) else "fail",
+        "confidence": 1.0,
+        "reason": f"title state: stage={state['stage']} hits={state['hits']}",
+        "verifier": f"adapter:{task.game}",
+    }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from adapters import get_adapter
-from adapters.fakegame import check_success, read_state
+from adapters.fakegame import check_success, read_state, verify
 
 from agb.models import TaskSpec
 
@@ -34,6 +34,17 @@ class TestReadState:
 
     def test_unparsable_title(self):
         assert read_state("Notepad")["stage"] is None
+
+
+class TestVerify:
+    def test_success_and_fail_verdicts(self):
+        v = verify(_task("testbed-click-red-square-001"), {"stage": 1, "hits": 1})
+        assert v["verdict"] == "success" and v["verifier"] == "adapter:fakegame"
+        v = verify(_task("testbed-click-red-square-001"), {"stage": 1, "hits": 0})
+        assert v["verdict"] == "fail"
+
+    def test_unreadable_title_returns_none(self):
+        assert verify(_task("testbed-click-red-square-001"), {"stage": None}) is None
 
 
 class TestCheckSuccess:
