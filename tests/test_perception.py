@@ -4,14 +4,48 @@ from __future__ import annotations
 
 import io
 
-from PIL import Image
+import pytest
+from PIL import Image, ImageDraw
 from tests.conftest import ROOT
 from tests.fakes import FakeCapture, KillNever
 
 from agb.agent.base import Decision
 from agb.loop import execute
 from agb.models import load_task_spec
-from agb.perception import apply_assist, grid_overlay
+from agb.perception import HAS_OCR, apply_assist, find_text, grid_overlay, ocr_text
+
+
+def _text_image(text: str = "HP 99") -> Image.Image:
+    img = Image.new("RGB", (300, 120), (10, 10, 14))
+    d = ImageDraw.Draw(img)
+    d.text((40, 40), text, fill=(240, 240, 240))
+    return img
+
+
+@pytest.mark.skipif(not HAS_OCR, reason="rapidocr not installed")
+class TestOcr:
+    def test_ocr_reads_big_text(self):
+        blocks = ocr_text(_text_image("HP 99"))
+        assert blocks, "OCR returned no blocks on clean synthetic text"
+        assert any("99" in b.text or "hp" in b.text.lower() for b in blocks)
+
+    def test_find_text_filters(self):
+        blocks = find_text(_text_image("HP 99"), "99")
+        assert blocks and all("99" in b.text for b in blocks)
+
+    def test_l2_annotates_boxes(self):
+        img = _text_image("HP 99")
+        out = apply_assist(img, "L2")
+        cyan = sum(
+            1
+            for px in out.getdata()
+            if px[0] < 100 and px[1] > 200 and px[2] > 200
+        )
+        assert cyan > 0, "no cyan OCR boxes drawn at L2"
+        # L1 must NOT contain cyan
+        out1 = apply_assist(img, "L1")
+        cyan1 = sum(1 for px in out1.getdata() if px[0] < 100 and px[1] > 200 and px[2] > 200)
+        assert cyan1 == 0
 
 
 class TestGridOverlay:

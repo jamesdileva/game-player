@@ -61,6 +61,7 @@ def _call(agent, prompt: str) -> tuple[str, dict]:
 
 def make_plan(goal: str, brief: str, agent, run_dir: str | Path) -> tuple[Plan | None, dict, float]:
     """Goal + brief -> Plan (or None), usage, seconds. Writes plan.md."""
+    Path(run_dir).mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
     prompt = (
         f"GOAL: {goal}\n\nRESEARCH BRIEF:\n{brief[:4000]}\n\n"

@@ -22,6 +22,9 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.4",
 ]
+ocr = [
+    "rapidocr-onnxruntime>=1.3",
+]
 
 [project.scripts]
 agb = "agb.cli:app"

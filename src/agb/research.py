@@ -30,21 +30,33 @@ class ResearchResult:
     error: str | None = None
 
 
+_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+
+
 def _default_search(query: str) -> list[str]:
-    """Best-effort keyless search via DuckDuckGo's HTML endpoint."""
+    """Best-effort keyless search via DuckDuckGo's lite endpoint.
+
+    Result links are protocol-relative redirect URLs (//duckduckgo.com/l/?uddg=...);
+    decode and normalize them to https.
+    """
     try:
-        r = httpx.post("https://html.duckduckgo.com/html/", data={"q": query}, timeout=20)
-        links = re.findall(r'href="[^"]*uddg=([^"&]+)', r.text)
         from urllib.parse import unquote
 
-        return [unquote(link) for link in links[:3]]
+        r = httpx.get("https://lite.duckduckgo.com/lite/", params={"q": query},
+                      timeout=20, headers=_UA)
+        links = re.findall(r'uddg=([^&">]+)', r.text)
+        out = []
+        for link in links[:3]:
+            u = unquote(link)
+            out.append("https:" + u if u.startswith("//") else u)
+        return out
     except Exception:
         return []
 
 
 def _default_fetch(url: str) -> str:
     try:
-        r = httpx.get(url, timeout=20, follow_redirects=True)
+        r = httpx.get(url, timeout=20, follow_redirects=True, headers=_UA)
         text = _TAG_RE.sub(" ", r.text)
         return re.sub(r"\s+", " ", text)[:_MAX_FETCH_CHARS]
     except Exception:
@@ -78,6 +90,7 @@ def research(
     """Run the research phase and write brief.md into the run folder."""
     search = search or _default_search
     fetch = fetch or _default_fetch
+    Path(run_dir).mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
     usage: dict = {"in_tokens": 0, "out_tokens": 0}
     error: str | None = None
@@ -100,7 +113,8 @@ def research(
                 f"GOAL: {goal}\nGAME: {game}\n"
                 f"MATERIAL SO FAR:\n{material or '(nothing yet)'}\n\n"
                 "If you need more information, reply with one line 'SEARCH: <query>'. "
-                "If you have enough, reply with the complete brief."
+                "If you have enough, reply with the complete brief. "
+                "Base the brief ONLY on the material - do not invent facts."
             )
             d = agent.decide("You are a game researcher.", prompt, [])
             _add(usage, _usage_of(d))
@@ -112,6 +126,21 @@ def research(
             urls = search(query)
             page_text = "\n\n".join(fetch(u) for u in urls)
             material += f"\n[search: {query}]\n{page_text}"
+
+        if not brief:
+            # the model kept searching until the budget ran out: force the summary
+            d = agent.decide(
+                "You are a game researcher.",
+                f"GOAL: {goal}\nGAME: {game}\n"
+                f"RESEARCH MATERIAL:\n{material[:8000] or '(nothing found)'}\n\n"
+                "Your search budget is used up. Reply with the complete brief now. "
+                "Base it ONLY on the research material - do not invent facts.",
+                [],
+            )
+            _add(usage, _usage_of(d))
+            brief = d.raw.strip()
+        if not brief:
+            brief = f"(research produced no brief; raw material retained)\n{material[:4000]}"
 
     else:  # none
         d = agent.decide(

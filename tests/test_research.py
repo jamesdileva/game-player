@@ -72,6 +72,13 @@ class TestWebMode:
         assert "430" in r.brief
         assert (tmp_path / "brief.md").exists()
 
+    def test_search_only_budget_still_yields_brief(self, tmp_path):
+        """Regression: a model that never stops searching still gets a brief."""
+        agent = ScriptedAgent(["SEARCH: query"] * 6)  # searches until budget out
+        r = research("g", "fakegame", agent, "web", tmp_path,
+                     max_minutes=0, search=lambda q: [], fetch=lambda u: "")
+        assert r.brief.strip(), "forced final brief missing"
+
     def test_time_cap_stops_the_loop(self, tmp_path):
         agent = ScriptedAgent(["SEARCH: query"])  # always wants more search
         r = research("g", "fakegame", agent, "web", tmp_path,
