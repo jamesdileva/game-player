@@ -84,16 +84,32 @@ class WindowCapture:
     """
 
     def __init__(self, title_substring: str, max_w: int = 1280, max_h: int = 720):
+        self.title_substring = title_substring
+        self.max_w, self.max_h = max_w, max_h
+        self._sct = mss.MSS()
+        self._select_window()
+
+    def _select_window(self) -> None:
         wins = [
             w
             for w in gw.getAllWindows()
-            if title_substring.lower() in (w.title or "").lower() and w.width > 0 and w.height > 0
+            if self.title_substring.lower() in (w.title or "").lower()
+            and w.width > 0 and w.height > 0
         ]
         if not wins:
-            raise WindowNotFoundError(f"No visible window matching {title_substring!r}")
+            raise WindowNotFoundError(
+                f"No visible window matching {self.title_substring!r}"
+            )
         self.win = wins[0]
-        self.max_w, self.max_h = max_w, max_h
-        self._sct = mss.MSS()
+
+    def refresh(self) -> bool:
+        """Re-enumerate and re-select the window (handles going stale between
+        runs or after the game re-creates its render surface)."""
+        try:
+            self._select_window()
+            return True
+        except WindowNotFoundError:
+            return False
 
     def rect(self) -> dict:
         return _client_rect(self.win) or {

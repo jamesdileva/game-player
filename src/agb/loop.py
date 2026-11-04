@@ -307,7 +307,13 @@ def execute(
             break
 
         # The game must be foreground or the capture sees whatever covers it.
-        if not capture.win.isActive:
+        # A stale window handle raises on access: re-select by title once.
+        try:
+            focused = capture.win.isActive
+        except Exception:
+            capture.refresh()
+            focused = False
+        if not focused:
             ensure_foreground(capture.win)
             time.sleep(0.2)
 
