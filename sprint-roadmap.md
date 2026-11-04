@@ -364,6 +364,7 @@ No local model has completed the door task (re-grounding after a state change + 
 | Hosted frontier reference model on the testbed tasks (ceiling data point; needs an API key) | Sprint 5 model matrix + a quick testbed re-run |
 | GUI-grounding-specialized local models (UI-TARS class) when they land in Ollama's library | Sprint 6 / Sprint A3 model ladder |
 | L2 OCR assist ablation (text blocks with coordinates) | Sprint 6 breadth/ablations |
+| **Standing re-run sessions**: re-batch the model matrix on parked games (OSRS, testbed) whenever the judge, models, or assists improve (SoM, num_ctx, L2 landed post-smoke) | Any session; `agb matrix` + `agb calibrate` |
 
 
 | Tier | Task | Notes |

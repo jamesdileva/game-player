@@ -1,0 +1,29 @@
+id: tos-menu-nav-001
+game: tos
+title: ToS menu navigation (title screen to file select)
+goal: "From the game's title screen, advance the menus until the file-select screen is visible."
+tier: 1
+mode: study
+start_state: >
+  Dolphin windowed with Tales of Symphonia booted to the title screen.
+  No save state needed; the game may be freshly booted.
+success:
+  evidence: >
+    A file-select or new-game screen is visible (character/file slots or a
+    name-entry prompt), proving menu navigation past the title screen.
+  evidence_step: "Stay on the file-select screen."
+  verifiers: [vlm]
+  milestones:
+    - name: title screen interacted
+      check: "the title screen is no longer idle (a menu opened)"
+    - name: menus advanced
+      check: "a submenu beyond the title screen is visible"
+limits:
+  max_steps: 15
+  max_wall_minutes: 10
+  max_cost_usd: 0.0
+research:
+  mode: none
+loop:
+  time_mode: realtime
+  assist_level: L2

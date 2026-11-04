@@ -20,14 +20,18 @@ class GameAdapter(Protocol):
 
 
 def get_adapter(game: str) -> GameAdapter:
-    if game == "fakegame":
+    if game in ("fakegame",):
         from . import fakegame
 
         return fakegame
-    if game == "osrs":
+    if game in ("osrs",):
         from . import osrs
 
         return osrs
+    if game in ("dolphin", "tos", "melee"):
+        from . import dolphin
+
+        return dolphin
     raise KeyError(
         f"No adapter for game {game!r}. Add one under adapters/ for new games."
     )

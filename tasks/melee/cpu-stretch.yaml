@@ -1,0 +1,31 @@
+id: melee-cpu-stretch-001
+game: melee
+title: Melee vs level-1 CPU (stretch)
+goal: "Deal damage to the level-1 CPU opponent in a single stock."
+tier: 4
+mode: study
+start_state: >
+  Dolphin windowed with a save state loaded at the CPU match start
+  (2 players, both stocks 1, no items). EXPECTED to fail at current model
+  capability - this run exists to tag real-time failure modes.
+success:
+  evidence: >
+    The CPU's damage percentage increases above its starting value,
+    proving a hit was landed.
+  evidence_step: "Pause on the damage display."
+  verifiers: [vlm]
+  milestones:
+    - name: moved
+      check: "the player character visibly moved from its spawn position"
+    - name: attack attempted
+      check: "an attack animation is visible"
+limits:
+  max_steps: 30
+  max_wall_minutes: 15
+  max_cost_usd: 0.0
+research:
+  mode: none
+loop:
+  time_mode: paused
+  assist_level: L2
+  max_stuck_events: 8

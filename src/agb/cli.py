@@ -71,7 +71,17 @@ def _prepare_capture(adapter, window_title: str | None, launch: bool, vw: int, v
     return capture, launched
 
 
-def _apply_task_overrides(spec, assist: str | None, research: str | None):
+def _apply_task_overrides(
+    spec, assist: str | None, research: str | None, time_mode: str | None = None
+):
+    if time_mode is not None:
+        if time_mode not in ("realtime", "paused"):
+            typer.secho(
+                f"--time-mode must be realtime or paused, got {time_mode!r}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+        spec.loop.time_mode = time_mode
     if assist is not None:
         if assist not in ("L0", "L1", "L2"):
             typer.secho(f"--assist must be L0, L1 or L2, got {assist!r}", fg=typer.colors.RED)
@@ -132,6 +142,9 @@ def run(
     judge: str | None = typer.Option(
         None, "--judge", help="Model profile to judge the run (omit: adapter-only verdict)"
     ),
+    time_mode: str | None = typer.Option(
+        None, "--time-mode", help="Override the task's time mode (realtime | paused)"
+    ),
 ) -> None:
     """Run one task with one agent; prints a results row and persists the full run folder.
 
@@ -147,7 +160,7 @@ def run(
     from agb.models import load_task_spec
 
     spec = load_task_spec(task)
-    _apply_task_overrides(spec, assist, research)
+    _apply_task_overrides(spec, assist, research, time_mode)
     adapter = get_adapter(spec.game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
@@ -192,6 +205,7 @@ def matrix(
     assist: str | None = typer.Option(None, "--assist"),
     research: str | None = typer.Option(None, "--research"),
     judge: str | None = typer.Option(None, "--judge"),
+    time_mode: str | None = typer.Option(None, "--time-mode"),
 ) -> None:
     """Run the same task across several models sequentially; prints a batch table.
 
@@ -206,7 +220,7 @@ def matrix(
     from agb.models import load_task_spec
     from agb.orchestrator import run as run_orchestrated
 
-    _apply_task_overrides(load_task_spec(task), assist, research)  # validates early
+    _apply_task_overrides(load_task_spec(task), assist, research, time_mode)  # validates early
     adapter = get_adapter(load_task_spec(task).game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
@@ -235,7 +249,7 @@ def matrix(
         for n in range(runs_per_model):
             typer.echo(f"--- matrix: {model} run {n + 1}/{runs_per_model}")
             spec = load_task_spec(task)  # fresh spec per run
-            _apply_task_overrides(spec, assist, research)
+            _apply_task_overrides(spec, assist, research, time_mode)
             record = run_orchestrated(
                 spec, build_agent(model), capture, kill, Path("runs"),
                 launched=launched, view_max=(vw, vh), max_steps=max_steps,

@@ -127,6 +127,7 @@ class LoopConfig(BaseModel):
     assist_level: Literal["L0", "L1", "L2"] = "L0"
     topology: Literal["single", "hybrid"] = "single"
     decision_hz: float | None = None  # optional decision-rate throttle
+    max_stuck_events: int = 6  # 0 disables the stuck budget
 
 
 class TaskSpec(BaseModel):

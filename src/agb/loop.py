@@ -20,6 +20,7 @@ from agb.capture import WindowCapture, ensure_foreground
 from agb.inputs import InputRejected, WindowInput
 from agb.killswitch import KillSwitch
 from agb.models import TaskSpec
+from agb.pause import GamePauser
 from agb.perception import OcrBlock, annotate_ocr, apply_assist, grid_overlay, ocr_text
 
 DEFAULT_SETTLE_MS = 300
@@ -42,7 +43,9 @@ _CALIBRATION_PROMPT = (
 )
 
 
-def _calibrate_frame(agent: Agent, view, res: LoopResult) -> tuple[float, float]:
+def _calibrate_frame(
+    agent: Agent, view, res: LoopResult, pauser: GamePauser | None = None
+) -> tuple[float, float]:
     """Measure the model's coordinate frame with a dot at a known position.
 
     Some vision pipelines rescale images before the encoder, so the model
@@ -57,11 +60,17 @@ def _calibrate_frame(agent: Agent, view, res: LoopResult) -> tuple[float, float]
         d.ellipse([tx - 14, ty - 14, tx + 14, ty + 14], fill=(255, 0, 255))
         buf = io.BytesIO()
         probe.save(buf, "JPEG", quality=85)
-        decision = agent.decide(
-            "You are a precise visual locator. Reply ONLY with JSON.",
-            _CALIBRATION_PROMPT,
-            [buf.getvalue()],
-        )
+        if pauser is not None:
+            pauser.suspend()
+        try:
+            decision = agent.decide(
+                "You are a precise visual locator. Reply ONLY with JSON.",
+                _CALIBRATION_PROMPT,
+                [buf.getvalue()],
+            )
+        finally:
+            if pauser is not None:
+                pauser.resume()
         res.model_calls += 1
         _accumulate(res, decision.usage)
         obj = extract_json_object(decision.raw) or {}
@@ -131,7 +140,8 @@ def _rec_step(
 
 @dataclass
 class LoopResult:
-    outcome: str  # claimed_done | cap_steps | cap_time | cap_cost | aborted | model_error | error
+    # claimed_done | cap_steps | cap_time | cap_cost | cap_stuck | aborted | model_error | error
+    outcome: str
     steps: int = 0
     model_calls: int = 0
     invalid_outputs: int = 0  # model replies that failed tolerant parsing
@@ -209,7 +219,8 @@ def _add_usage(dst: dict, src: dict) -> None:
 
 
 def _call_agent(
-    agent: Agent, system: str, user: str, images: list[bytes], res: LoopResult
+    agent: Agent, system: str, user: str, images: list[bytes], res: LoopResult,
+    pauser: GamePauser | None = None,
 ) -> Decision | None:
     """Call the model with bounded retries on transient failures.
 
@@ -221,7 +232,13 @@ def _call_agent(
     for attempt in range(_MODEL_ATTEMPTS):
         res.model_calls += 1
         try:
-            return agent.decide(system, user, images)
+            if pauser is not None:
+                pauser.suspend()
+            try:
+                return agent.decide(system, user, images)
+            finally:
+                if pauser is not None:
+                    pauser.resume()
         except Exception as e:
             last_err = f"{type(e).__name__}: {e}"
             _note_error(res, f"model call failed: {last_err}")
@@ -240,6 +257,7 @@ def execute(
     recorder=None,
     plan=None,
     replan_fn=None,
+    pauser: GamePauser | None = None,
     max_steps: int | None = None,
     max_wall_minutes: float | None = None,
     max_cost_usd: float | None = None,
@@ -262,6 +280,10 @@ def execute(
     unchanged_steps = 0
     acted_last_step = False
     consecutive_model_failures = 0
+    pauser_obj = None
+    if task.loop.time_mode == "paused":
+        pauser_obj = pauser or GamePauser.from_window(capture.win)
+    max_stuck = task.loop.max_stuck_events
     wants_calibration = getattr(agent, "frame_calibration", False)
     frame_scale: tuple[float, float] | None = (1.0, 1.0) if not wants_calibration else None
     last_replan_step = -_REPLAN_MIN_STEPS
@@ -280,6 +302,9 @@ def execute(
         if res.cost_usd >= cost_cap > 0:
             res.outcome = "cap_cost"
             break
+        if max_stuck > 0 and res.stuck_events >= max_stuck:
+            res.outcome = "cap_stuck"
+            break
 
         # The game must be foreground or the capture sees whatever covers it.
         if not capture.win.isActive:
@@ -296,7 +321,7 @@ def execute(
             model_view = apply_assist(view, task.loop.assist_level)  # L1: gridded
 
         if frame_scale is None:
-            frame_scale = _calibrate_frame(agent, model_view, res)
+            frame_scale = _calibrate_frame(agent, model_view, res, pauser_obj)
             res.frame_scale = frame_scale
 
         sample = _sample(view)
@@ -344,7 +369,7 @@ def execute(
                 'regions; you may click one with {"type": "click", "mark": <number>}.'
             )
         jpeg = _jpeg(model_view)
-        decision = _call_agent(agent, SYSTEM, user, [jpeg], res)
+        decision = _call_agent(agent, SYSTEM, user, [jpeg], res, pauser_obj)
         if decision is None:
             consecutive_model_failures += 1
             _rec_step(recorder, full, _step, thought="", actions=[], usage=_new_usage(),
@@ -376,7 +401,7 @@ def execute(
                 user + f"\n\nYour previous reply was not usable ({err}). "
                 "Reply ONLY with the JSON object."
             )
-            decision = _call_agent(agent, SYSTEM, user2, [jpeg], res)
+            decision = _call_agent(agent, SYSTEM, user2, [jpeg], res, pauser_obj)
             if decision is None:
                 _rec_step(recorder, full, _step, thought="", actions=[], usage=step_usage,
                           raw="", err="re-ask failed", frame_scale=frame_scale)

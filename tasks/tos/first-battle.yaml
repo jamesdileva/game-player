@@ -1,0 +1,32 @@
+id: tos-first-battle-001
+game: tos
+title: ToS win the first battle
+goal: "Win the first battle of the game."
+tier: 1
+mode: study
+start_state: >
+  Dolphin windowed with a save state loaded at the first battle's start
+  (the human parks the emulator there once; deterministic start state).
+success:
+  evidence: >
+    A battle-result or victory screen is visible, or all enemies are gone
+    with battle UI closed, proving the battle was won.
+  evidence_step: "Stay on the result screen."
+  verifiers: [vlm]
+  milestones:
+    - name: battle menu opened
+      check: "the battle menu (Items/Skills/Attack) is visible"
+    - name: attack executed
+      check: "an attack animation or damage number is visible"
+    - name: enemies down
+      check: "no enemies remain on the battle field"
+limits:
+  max_steps: 40
+  max_wall_minutes: 25
+  max_cost_usd: 0.0
+research:
+  mode: none
+loop:
+  time_mode: paused
+  assist_level: L2
+  max_stuck_events: 8
