@@ -20,7 +20,8 @@ class TestScriptedAgent:
         agent = ScriptedAgent([[Click(x=1, y=2)], "raw string reply"])
         d1 = agent.decide("s", "u", [])
         first_action = json.loads(d1.raw)["actions"][0]
-        assert first_action == {"type": "click", "x": 1, "y": 2, "button": "left"}
+        clean = {k: v for k, v in first_action.items() if v is not None}
+        assert clean == {"type": "click", "x": 1, "y": 2, "button": "left"}
         d2 = agent.decide("s", "u", [])
         assert d2.raw == "raw string reply"
 

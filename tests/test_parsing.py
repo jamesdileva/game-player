@@ -192,9 +192,15 @@ class TestInvalidOutput:
         _, _, err = parse_model_output('{"thought": "t", "actions": {"type": "click"}}')
         assert err == "actions_not_a_list"
 
-    def test_missing_coords(self):
+    def test_missing_coords_and_mark(self):
         _, _, err = parse_model_output('{"thought": "t", "actions": [{"type": "click"}]}')
         assert err is not None and err.startswith("invalid_action")
+
+    def test_mark_click_parses(self):
+        _, actions, err = parse_model_output(
+            '{"thought": "t", "actions": [{"type": "click", "mark": 3}]}'
+        )
+        assert err is None and actions[0].mark == 3
 
     def test_fenced_json_preferred_over_prose_braces(self):
         text = 'A {not json} then ```json\n{"thought": "real", "actions": []}\n```'

@@ -93,6 +93,10 @@ class TestActions:
         with pytest.raises(ValidationError):
             parse_actions([{"type": "teleport", "x": 1, "y": 2}])
 
-    def test_rejects_missing_coords(self):
+    def test_rejects_missing_coords_and_mark(self):
         with pytest.raises(ValidationError):
             parse_actions([{"type": "click"}])
+
+    def test_mark_click_valid_without_coords(self):
+        actions = parse_actions([{"type": "click", "mark": 2}])
+        assert actions[0].mark == 2 and actions[0].x is None

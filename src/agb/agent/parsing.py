@@ -30,7 +30,7 @@ _POSITIONAL_ARGS = {
     "done": ("claim",),
 }
 
-_INT_FIELDS = {"x", "y", "x1", "y1", "x2", "y2", "hold_ms", "ms", "dy"}
+_INT_FIELDS = {"x", "y", "x1", "y1", "x2", "y2", "hold_ms", "ms", "dy", "mark"}
 
 
 def _coerce_ints(action: dict) -> dict:

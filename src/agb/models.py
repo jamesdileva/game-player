@@ -9,22 +9,32 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
 
 # --- Actions (architecture.md 7.2) -------------------------------------------
 
 
-class Click(BaseModel):
+class _MarkOrCoords(BaseModel):
+    """Pointer action with either coordinates or an L2 set-of-marks ID."""
+
+    x: int | None = None
+    y: int | None = None
+    mark: int | None = None  # 1-based: act on the center of OCR mark #mark
+
+    @model_validator(mode="after")
+    def _needs_target(self):
+        if self.x is None and self.mark is None:
+            raise ValueError("pointer action requires x/y or a mark")
+        return self
+
+
+class Click(_MarkOrCoords):
     type: Literal["click"] = "click"
-    x: int
-    y: int
     button: Literal["left", "right", "middle"] = "left"
 
 
-class DoubleClick(BaseModel):
+class DoubleClick(_MarkOrCoords):
     type: Literal["double_click"] = "double_click"
-    x: int
-    y: int
 
 
 class Drag(BaseModel):
@@ -35,10 +45,8 @@ class Drag(BaseModel):
     y2: int
 
 
-class Move(BaseModel):
+class Move(_MarkOrCoords):
     type: Literal["move"] = "move"
-    x: int
-    y: int
 
 
 class Key(BaseModel):

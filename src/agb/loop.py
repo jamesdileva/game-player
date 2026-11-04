@@ -17,10 +17,10 @@ from agb.agent.base import Agent, Decision
 from agb.agent.parsing import extract_json_object, parse_model_output
 from agb.agent.prompts import SYSTEM, build_user_message
 from agb.capture import WindowCapture, ensure_foreground
-from agb.inputs import WindowInput
+from agb.inputs import InputRejected, WindowInput
 from agb.killswitch import KillSwitch
 from agb.models import TaskSpec
-from agb.perception import apply_assist
+from agb.perception import OcrBlock, annotate_ocr, apply_assist, grid_overlay, ocr_text
 
 DEFAULT_SETTLE_MS = 300
 DEFAULT_STUCK_PATIENCE = 5
@@ -94,6 +94,18 @@ def _scale_action(a, sx: float, sy: float):
         if getattr(a, f, None) is not None:
             setattr(a, f, int(round(getattr(a, f) / sy)))
     return a
+
+
+def _resolve_mark(a, blocks: list[OcrBlock]) -> None:
+    """Set x/y to the center of the numbered OCR mark (L2 set-of-marks)."""
+    idx = (a.mark or 1) - 1
+    if not (0 <= idx < len(blocks)):
+        raise InputRejected(
+            f"mark {a.mark} not found ({len(blocks)} marks on screen)"
+        )
+    b = blocks[idx]
+    a.x = b.x + b.w // 2
+    a.y = b.y + b.h // 2
 
 
 def _rec_step(
@@ -276,7 +288,12 @@ def execute(
 
         _full, view, scale, _ts = capture.grab()
         full = _full
-        model_view = apply_assist(view, task.loop.assist_level)  # L1+: gridded
+        ocr_blocks: list[OcrBlock] = []
+        if task.loop.assist_level == "L2":
+            ocr_blocks = ocr_text(view)
+            model_view = annotate_ocr(grid_overlay(view), ocr_blocks)
+        else:
+            model_view = apply_assist(view, task.loop.assist_level)  # L1: gridded
 
         if frame_scale is None:
             frame_scale = _calibrate_frame(agent, model_view, res)
@@ -320,6 +337,11 @@ def execute(
             user += (
                 f"\nThe screenshot has a labeled yellow coordinate grid "
                 f"(assist {task.loop.assist_level}); use the grid labels for precise coordinates."
+            )
+        if task.loop.assist_level == "L2" and ocr_blocks:
+            user += (
+                f"\nCyan numbered badges mark {len(ocr_blocks)} detected text "
+                'regions; you may click one with {"type": "click", "mark": <number>}.'
             )
         jpeg = _jpeg(model_view)
         decision = _call_agent(agent, SYSTEM, user, [jpeg], res)
@@ -395,6 +417,8 @@ def execute(
             try:
                 if kind in ("click", "double_click", "move", "drag", "scroll"):
                     a = _scale_action(a, *frame_scale)
+                if kind in ("click", "double_click", "move") and a.mark is not None:
+                    _resolve_mark(a, ocr_blocks)
                 if kind == "click":
                     inp.click(a.x, a.y, scale, a.button)
                 elif kind == "double_click":

@@ -60,6 +60,7 @@ class ModelProfile(BaseModel):
     calibrate_frame: bool = False
     extra_body: dict = Field(default_factory=dict)  # provider-specific request fields
     native_ollama: bool = False  # use /api/chat with think:false (OpenAI layer ignores it)
+    num_ctx: int | None = None  # native-path context window (raises Ollama's 4096 default)
 
 
 def load_model_profiles(path: str | Path = "models.yaml") -> dict[str, ModelProfile]:
@@ -97,6 +98,7 @@ def build_agent(name: str, profiles_path: str | Path = "models.yaml"):
         max_tokens=p.max_tokens,
         extra_body=p.extra_body,
         native_ollama=p.native_ollama,
+        native_num_ctx=p.num_ctx,
     )
     agent.frame_calibration = p.calibrate_frame
     return agent

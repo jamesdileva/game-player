@@ -28,6 +28,7 @@ class OpenAICompatAgent:
         max_tokens: int = 400,  # bound runaway generations (local models ramble)
         extra_body: dict | None = None,  # provider-specific fields, e.g. {"think": false}
         native_ollama: bool = False,  # use Ollama's /api/chat (needed for think:false)
+        native_num_ctx: int | None = None,  # context window for the native path
         transport: httpx.BaseTransport | None = None,  # injectable for tests
     ):
         self.name = name
@@ -36,6 +37,7 @@ class OpenAICompatAgent:
         self.max_tokens = max_tokens
         self.extra_body = dict(extra_body or {})
         self.native_ollama = native_ollama
+        self.native_num_ctx = native_num_ctx
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self.client = httpx.Client(
             base_url=base_url, timeout=timeout, headers=headers, transport=transport
@@ -68,7 +70,8 @@ class OpenAICompatAgent:
             "model": self.model,
             "stream": False,
             "think": False,
-            "options": {"num_predict": self.max_tokens},
+            "options": {"num_predict": self.max_tokens,
+                        **({"num_ctx": self.native_num_ctx} if self.native_num_ctx else {})},
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user, "images": b64s},

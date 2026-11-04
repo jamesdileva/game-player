@@ -11,8 +11,15 @@ from tests.fakes import FakeCapture, KillNever
 
 from agb.agent.base import Decision
 from agb.loop import execute
-from agb.models import load_task_spec
-from agb.perception import HAS_OCR, apply_assist, find_text, grid_overlay, ocr_text
+from agb.models import Click, load_task_spec
+from agb.perception import (
+    HAS_OCR,
+    OcrBlock,
+    apply_assist,
+    find_text,
+    grid_overlay,
+    ocr_text,
+)
 
 
 def _text_image(text: str = "HP 99") -> Image.Image:
@@ -118,3 +125,22 @@ class TestLoopAssistWiring:
         img = Image.open(io.BytesIO(agent.received[0]))
         colors = img.getcolors(maxcolors=8)
         assert colors and len(colors) == 1  # no grid drawn
+
+
+class TestSetOfMarks:
+    def test_resolve_mark_sets_center(self):
+        import pytest
+
+        from agb.inputs import InputRejected
+        from agb.loop import _resolve_mark
+
+        blocks = [
+            OcrBlock(text="a", x=0, y=0, w=50, h=20),
+            OcrBlock(text="b", x=100, y=200, w=60, h=24),
+        ]
+        a = Click(mark=2)
+        _resolve_mark(a, blocks)
+        assert (a.x, a.y) == (130, 212)
+
+        with pytest.raises(InputRejected, match="mark 5"):
+            _resolve_mark(Click(mark=5), blocks)
