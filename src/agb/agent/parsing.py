@@ -99,6 +99,31 @@ def _coerce_action(a):
     return a
 
 
+def _merge_name_arg_pairs(raw_actions: list) -> list:
+    """Merge ["note", "some text"] into {"type": "note", "text": "some text"}.
+
+    Models sometimes emit the action name and its argument as separate list
+    elements instead of an object or a function call.
+    """
+    out: list = []
+    i = 0
+    while i < len(raw_actions):
+        a = raw_actions[i]
+        if (
+            isinstance(a, str)
+            and a.strip() in _POSITIONAL_ARGS
+            and i + 1 < len(raw_actions)
+            and isinstance(raw_actions[i + 1], str)
+        ):
+            name = a.strip()
+            out.append({"type": name, _POSITIONAL_ARGS[name][0]: raw_actions[i + 1]})
+            i += 2
+            continue
+        out.append(a)
+        i += 1
+    return out
+
+
 def extract_json_object(text: str) -> dict | None:
     """First valid JSON object in the text (fenced or brace-delimited), or None."""
     for span in _balanced_objects(text):
@@ -179,6 +204,7 @@ def parse_model_output(text: str) -> tuple[str, list[Action], str | None]:
         return "", [], "no_json"
     if not saw_actions:
         return " ".join(thoughts), [], "no_actions"
+    raw_actions = _merge_name_arg_pairs(raw_actions)
     try:
         actions = parse_actions([_coerce_action(a) for a in raw_actions])
     except ValidationError as e:

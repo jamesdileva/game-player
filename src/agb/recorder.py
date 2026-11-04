@@ -54,13 +54,16 @@ class Recorder:
         drifts out of frame (steps.jsonl remains the source of truth).
         Best-effort: if ffmpeg is missing or fails, steps.jsonl still stands.
         """
+        # yuv420p needs even dimensions; window rects are often odd
+        w = rect["width"] - (rect["width"] % 2)
+        h = rect["height"] - (rect["height"] % 2)
         try:
             self._video = subprocess.Popen(
                 [
                     "ffmpeg", "-hide_banner", "-loglevel", "error",
                     "-f", "gdigrab",
                     "-offset_x", str(rect["left"]), "-offset_y", str(rect["top"]),
-                    "-video_size", f"{rect['width']}x{rect['height']}",
+                    "-video_size", f"{w}x{h}",
                     "-framerate", str(fps),
                     "-i", "desktop",
                     "-pix_fmt", "yuv420p", "-y",
@@ -77,15 +80,18 @@ class Recorder:
     def stop_video(self) -> None:
         if self._video is None:
             return
+        proc, self._video = self._video, None
         try:
-            if self._video.stdin:
-                self._video.stdin.write(b"q")  # graceful stop writes the mp4 index
-                self._video.stdin.flush()
-            self._video.wait(timeout=10)
+            if proc.stdin:
+                proc.stdin.write(b"q")  # graceful stop writes the mp4 index
+                proc.stdin.flush()
+            proc.wait(timeout=10)
         except Exception:
-            self._video.kill()
-        finally:
-            self._video = None
+            proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
 
     def close(self) -> None:
         self.stop_video()

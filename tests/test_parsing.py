@@ -102,6 +102,20 @@ class TestFunctionCallStrings:
         assert err is not None and err.startswith("invalid_action")
 
 
+
+    def test_name_arg_pair_merge(self):
+        """Observed on OSRS: ["note", "text..."] — name and argument as separate elements."""
+        _, actions, err = parse_model_output(
+            '{"thought": "t", "actions": ["note", "Identify the goblin"]}'
+        )
+        assert err is None
+        assert actions[0].type == "note" and actions[0].text == "Identify the goblin"
+
+    def test_bare_done_without_arg_untouched(self):
+        _, actions, err = parse_model_output('{"thought": "t", "actions": ["done"]}')
+        assert err is None and actions[0].type == "done"
+
+
 class TestNumericCoercion:
     """Models emit coordinates as strings or floats; intent is unambiguous."""
 

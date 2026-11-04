@@ -203,6 +203,14 @@ Tasks:
 
 **Risks:** Latency makes combat-adjacent tasks flaky; account bans (accepted, throwaway only). If OSRS proves too fragile for realtime, run an emulator task first (Sprint 6 item) and return.
 
+### Sprint 5 smoke results (2026-11-04, qwen2.5vl:3b, 10 steps, no research)
+
+- Full pipeline validated on a real MMO client (RuneLite, windowed): capture, key/pointer injection, recording (15 MB mp4), judge verdicts with cited frames and double-pass agreement.
+- Parser tolerance extended live: models emit name+argument action pairs (["note", "..."]) — 80% -> 33% invalid after the pairwise-merge fix.
+- Judge context fix: keyframes capped at 3 (baseline + claim tail) at 448px — qwen2.5-vl costs ~1k tokens/frame; 6 frames overflowed Ollama's 4096 context.
+- Judge verdict on the smoke: fail (double-pass agree, cited frames, correct reasoning — the model wandered and noted, never attacked a goblin). Expected at 3B in realtime; the taxonomy tags it grounding/timing.
+- Model matrix + L0/L1 + research ablations ready to run via `agb matrix`.
+
 ---
 
 ## Sprint A1: Long-run foundations

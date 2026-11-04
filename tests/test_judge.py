@@ -97,7 +97,7 @@ class TestJudgeRun:
         v = judge_run(run_dir, _spec(), judge)
         assert v.verdict == "success"
         assert v.agreement == "agree"
-        assert judge.image_counts == [4, 4]  # double pass, same keyframe count
+        assert judge.image_counts == [3, 3]  # double pass, same keyframe count
 
     def test_disagreement_takes_conservative(self, tmp_path):
         run_dir = _recorded_run(tmp_path, n_steps=4)

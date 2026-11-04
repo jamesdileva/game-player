@@ -19,7 +19,7 @@ from agb.config import redact
 from agb.models import TaskSpec
 
 _MAX_FRAMES = 8
-_JUDGE_FRAME_MAX_W = 512  # judge frames are downscaled; fits ~4096-context models
+_JUDGE_FRAME_MAX_W = 448  # judge frames are downscaled; fits ~4096-context models
 
 
 @dataclass
@@ -34,7 +34,7 @@ class Verdict:
     error: str | None = None
 
 
-def select_keyframes(run_dir: str | Path, max_frames: int = _MAX_FRAMES) -> list[Path]:
+def select_keyframes(run_dir: str | Path, max_frames: int = 3) -> list[Path]:
     """Baseline + claim/evidence tail + uniform sample of the run's frames."""
     run_dir = Path(run_dir)
     steps: list[dict] = []
