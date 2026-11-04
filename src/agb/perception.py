@@ -64,11 +64,11 @@ def find_text(img: Image.Image, pattern: str) -> list[OcrBlock]:
     return [b for b in ocr_text(img) if rx.search(b.text)]
 
 
-def annotate_ocr(view: Image.Image) -> Image.Image:
+def annotate_ocr(view: Image.Image, blocks: list[OcrBlock] | None = None) -> Image.Image:
     """Draw OCR boxes + text onto the view in cyan (L2)."""
     out = view.copy()
     d = ImageDraw.Draw(out)
-    for b in ocr_text(view):
+    for b in (blocks if blocks is not None else ocr_text(view)):
         d.rectangle([b.x, b.y, b.x + b.w, b.y + b.h], outline=OCR_COLOR, width=1)
         d.text((b.x, max(0, b.y - 12)), b.text[:30], fill=OCR_COLOR)
     return out

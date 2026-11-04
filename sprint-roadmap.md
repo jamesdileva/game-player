@@ -271,6 +271,13 @@ Tasks:
 - Paused vs realtime comparison on one task, showing the effect of latency.
 - Updated difficulty tiers based on actual results.
 
+### Sprint 6 progress (2026-11-04, ToS menu task, qwen2.5vl:3b, n=1 per mode)
+
+- First emulator runs through the full pipeline (Dolphin render window, capture, keys, recording, judged).
+- L2 bug found and fixed live: the loop's L2 path passed OCR blocks to a single-arg annotate_ocr (caught at step 0, regression-tested).
+- Paused vs realtime: invalid outputs 67% -> 35% in paused mode; latency similar; Dolphin visibly froze during inference (pause mechanism visually confirmed). Neither run reached the file-select screen: the run started mid-INTRO-CUTSCENE (start-state mismatch - the model pressed arrows at an unskippable movie instead of mashing Start to skip), and the judge correctly failed both (one with an honest double-pass disagreement).
+- Next: park ON the title menu (skip the intro first), re-run; battle task after the save state.
+
 ---
 
 ## Sprint H1: Calibration micro-benchmark
