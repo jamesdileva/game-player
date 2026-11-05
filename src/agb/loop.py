@@ -221,7 +221,7 @@ def _add_usage(dst: dict, src: dict) -> None:
 
 def _call_agent(
     agent: Agent, system: str, user: str, images: list[bytes], res: LoopResult,
-    pauser: GamePauser | None = None,
+    pauser: GamePauser | None = None, max_tokens: int | None = None,
 ) -> Decision | None:
     """Call the model with bounded retries on transient failures.
 
@@ -236,7 +236,7 @@ def _call_agent(
             if pauser is not None:
                 pauser.suspend()
             try:
-                return agent.decide(system, user, images)
+                return agent.decide(system, user, images, max_tokens=max_tokens)
             finally:
                 if pauser is not None:
                     pauser.resume()
@@ -391,7 +391,9 @@ def execute(
                     'regions; you may click one with {"type": "click", "mark": <number>}.'
                 )
         jpeg = _jpeg(model_view)
-        decision = _call_agent(agent, system, user, [jpeg], res, pauser_obj)
+        call_max_tokens = 40 if reflex else None  # reflex replies are one line
+        decision = _call_agent(agent, system, user, [jpeg], res, pauser_obj,
+                               max_tokens=call_max_tokens)
         if decision is None:
             consecutive_model_failures += 1
             _rec_step(recorder, full, _step, thought="", actions=[], usage=_new_usage(),

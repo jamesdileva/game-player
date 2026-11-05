@@ -49,11 +49,14 @@ class OpenAICompatAgent:
         b64 = base64.b64encode(jpeg).decode()
         return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
 
-    def decide(self, system: str, user: str, images: list[bytes]) -> Decision:
+    def decide(
+        self, system: str, user: str, images: list[bytes],
+        max_tokens: int | None = None,
+    ) -> Decision:
         t0 = time.perf_counter()
         if self.native_ollama:
-            return self._decide_native(system, user, images, t0)
-        return self._decide_openai(system, user, images, t0)
+            return self._decide_native(system, user, images, t0, max_tokens)
+        return self._decide_openai(system, user, images, t0, max_tokens)
 
     def _native_url(self) -> str:
         """Strip the OpenAI '/v1' suffix from the base URL for /api/chat."""
@@ -62,7 +65,10 @@ class OpenAICompatAgent:
             base = base[:-3]
         return f"{base}/api/chat"
 
-    def _decide_native(self, system: str, user: str, images: list[bytes], t0: float) -> Decision:
+    def _decide_native(
+        self, system: str, user: str, images: list[bytes], t0: float,
+        max_tokens: int | None = None,
+    ) -> Decision:
         """Ollama's /api/chat: the OpenAI-compat layer ignores think:false for
         some models, leaving reasoning running until the token budget dies."""
         b64s = [base64.b64encode(j).decode() for j in images]
@@ -70,7 +76,7 @@ class OpenAICompatAgent:
             "model": self.model,
             "stream": False,
             "think": False,
-            "options": {"num_predict": self.max_tokens,
+            "options": {"num_predict": max_tokens or self.max_tokens,
                         **({"num_ctx": self.native_num_ctx} if self.native_num_ctx else {})},
             "messages": [
                 {"role": "system", "content": system},
@@ -95,13 +101,16 @@ class OpenAICompatAgent:
             },
         )
 
-    def _decide_openai(self, system: str, user: str, images: list[bytes], t0: float) -> Decision:
+    def _decide_openai(
+        self, system: str, user: str, images: list[bytes], t0: float,
+        max_tokens: int | None = None,
+    ) -> Decision:
         content: list[dict] = [{"type": "text", "text": user}]
         content += [self._img(j) for j in images]
         body = {
             "model": self.model,
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "max_tokens": max_tokens or self.max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": content},

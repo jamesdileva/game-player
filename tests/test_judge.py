@@ -31,7 +31,7 @@ class MockJudge:
         self.prompts: list[str] = []
         self.image_counts: list[int] = []
 
-    def decide(self, system, user, images):
+    def decide(self, system, user, images, **kwargs):
         self.prompts.append(system + "\n" + user)
         self.image_counts.append(len(images))
         return Decision(self.replies.pop(0) if self.replies else FAIL_JSON,

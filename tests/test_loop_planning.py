@@ -31,7 +31,7 @@ class PromptCapturingAgent(ScriptedAgent):
         super().__init__(script)
         self.prompts: list[str] = []
 
-    def decide(self, system, user, images):
+    def decide(self, system, user, images, **kwargs):
         self.prompts.append(user)
         return super().decide(system, user, images)
 

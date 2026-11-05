@@ -85,7 +85,7 @@ class CapturingAgent:
     def __init__(self):
         self.received: list[bytes] = []
 
-    def decide(self, system, user, images):
+    def decide(self, system, user, images, **kwargs):
         self.received.extend(images)
         return Decision(raw='{"thought": "t", "actions": [{"type": "done"}]}',
                         usage={"in_tokens": 0, "out_tokens": 0, "cost_usd": 0.0, "latency_ms": 0})

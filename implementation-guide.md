@@ -464,6 +464,7 @@ Measured across 11 recorded runs (qwen2.5vl:3b on a small-VRAM GPU):
 - **Image size is NOT a token lever on qwen2.5-vl**: its smart-resize has a minimum-pixel floor - 512x384 tokenizes the same as 640x480 (~1460 in/call measured). The smaller view DID cut invalid outputs sharply (52% -> 13%, n=1) and speeds OCR; adopt per task, but don't expect token savings.
 - **Generation is a minor cost**: replies are 30-165 tokens; even at 1 tok/s that's seconds. Optimize prompt-eval first, generation second.
 - **Hosted APIs sidestep all of this** - the frontier-reference lever exists as much for speed as for capability.
+- **Reflex-mode model matrix (2026-11-05, RX 6400 4GB)**: qwen2.5vl:3b = clean one-line replies but 40s/call (50/50 split); qwen3-vl:2b = 100% GPU but always thinks (think:false ignored, budget dies before content); moondream = 100% GPU, 4-11s/call, but cannot follow the reflex contract. No local model is fast AND instruction-following on 4GB - reflex defaults to qwen2.5vl:3b.
 
 ## 15. Common pitfalls
 

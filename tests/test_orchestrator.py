@@ -29,7 +29,7 @@ SQUARE_CENTER = (430, 330)
 class ChargingAgent(ScriptedAgent):
     """Scripted agent whose every call costs money."""
 
-    def decide(self, system, user, images):
+    def decide(self, system, user, images, **kwargs):
         d = super().decide(system, user, images)
         d.usage["cost_usd"] = 0.10
         return d
@@ -111,7 +111,7 @@ class TestOrchestratorRun:
 
             name = "phased-mock"
 
-            def decide(self, system, user, images):
+            def decide(self, system, user, images, **kwargs):
                 usage = {"in_tokens": 1, "out_tokens": 1, "cost_usd": 0.0, "latency_ms": 1}
                 if "Write a concise brief" in user:
                     return Decision("brief: click the square at (430, 330).", usage)
@@ -140,7 +140,7 @@ class TestOrchestratorRun:
         rec = Recorder(run_dir)
 
         class CrashingAgent(ScriptedAgent):
-            def decide(self, system, user, images):
+            def decide(self, system, user, images, **kwargs):
                 if len(self._script) <= 1:  # crash after the first scripted step
                     raise KeyboardInterrupt("simulated crash")
                 return super().decide(system, user, images)

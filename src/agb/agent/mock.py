@@ -19,7 +19,7 @@ class ScriptedAgent:
     def __init__(self, script: list[list[Action] | str]):
         self._script = list(script)
 
-    def decide(self, system: str, user: str, images: list[bytes]) -> Decision:
+    def decide(self, system: str, user: str, images: list[bytes], **kwargs) -> Decision:
         if self._script:
             item = self._script.pop(0)
             raw = item if isinstance(item, str) else json_dumps_actions(item)

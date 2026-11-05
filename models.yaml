@@ -33,6 +33,17 @@ profiles:
     native_ollama: true  # think:false + num_ctx via /api/chat
     num_ctx: 4096  # 8192 doubled the KV cache with no offload benefit (audited 2026-11-05)
     calibrate_frame: true  # reports coords in its internal ~1024x768 frame
+  moondream:
+    base_url: http://localhost:11434/v1
+    model: moondream
+    price_in: 0.0
+    price_out: 0.0
+    timeout: 120.0
+    max_tokens: 60
+    native_ollama: true
+    num_ctx: 2048
+    # audited 2026-11-05: 100% GPU, 4-11s/call - but cannot follow the reflex
+    # contract reliably (garbled one-liners); kept for experiments only
   qwen3vl-2b:
     base_url: http://localhost:11434/v1
     model: qwen3-vl:2b

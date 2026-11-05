@@ -28,6 +28,10 @@ class GamePauser:
         except psutil.NoSuchProcess:
             self.proc = None
         self._suspended = False  # idempotent: nested suspend/resume stay balanced
+        # a fresh run must start with the game live (a previous killed run
+        # can leave it suspended mid-call)
+        if self.proc is not None and self.proc.status() == psutil.STATUS_STOPPED:
+            self.resume()
 
     @classmethod
     def from_window(cls, win) -> GamePauser | None:

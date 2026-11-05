@@ -30,7 +30,7 @@ class TestProvidedMode:
         calls = []
 
         class CountingAgent(ScriptedAgent):
-            def decide(self, system, user, images):
+            def decide(self, system, user, images, **kwargs):
                 calls.append(user)
                 return super().decide(system, user, images)
 
