@@ -27,6 +27,7 @@ limits:
 research:
   mode: none
 loop:
+  mode: reflex
   time_mode: paused
   assist_level: L2
   max_stuck_events: 8

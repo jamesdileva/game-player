@@ -25,5 +25,6 @@ limits:
 research:
   mode: none
 loop:
+  mode: reflex
   time_mode: realtime
   assist_level: L2

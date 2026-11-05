@@ -16,6 +16,7 @@ from PIL import ImageDraw
 from agb.agent.base import Agent, Decision
 from agb.agent.parsing import extract_json_object, parse_model_output
 from agb.agent.prompts import SYSTEM, build_user_message
+from agb.agent.reflex import REFLEX_SYSTEM, build_reflex_message, parse_reflex
 from agb.capture import WindowCapture, ensure_foreground
 from agb.inputs import InputRejected, WindowInput
 from agb.killswitch import KillSwitch
@@ -279,6 +280,7 @@ def execute(
     last_sample: bytes | None = None
     unchanged_steps = 0
     acted_last_step = False
+    reflex = task.loop.mode == "reflex"
     consecutive_model_failures = 0
     pauser_obj = None
     if task.loop.time_mode == "paused":
@@ -349,38 +351,47 @@ def execute(
         else:
             unchanged_steps = 0
 
-        want_replan = stuck_now  # a stuck event requests a replan (throttled below)
+        reflex = task.loop.mode == "reflex"
+        want_replan = stuck_now and not reflex  # reflex has no plan
 
         # evidence turn termination: the budget ran out after a done claim
         if done_claimed and evidence_left is not None and evidence_left <= 0:
             res.outcome = "claimed_done"
             break
 
-        user = build_user_message(
-            task.goal, scratchpad, recent, stuck=stuck_now, patience=stuck_patience
-        )
+        if reflex:
+            user = build_reflex_message(task.goal, [b.text for b in ocr_blocks], recent)
+            system = REFLEX_SYSTEM
+        else:
+            user = build_user_message(
+                task.goal, scratchpad, recent, stuck=stuck_now, patience=stuck_patience
+            )
+            system = SYSTEM
         phase = "execute"
         if evidence_left is not None:
             phase = "evidence"
-            user += (
-                "\n\nYou claimed the goal is done. EVIDENCE TURN: show the proof on "
-                "screen now (open the screen, counter or inventory that demonstrates "
-                "it). Do not claim done again."
-            )
-        if plan is not None:
-            user += f"\n\nPLAN (do these in order):\n{plan.render()}"
-        if task.loop.assist_level in ("L1", "L2"):
-            user += (
-                f"\nThe screenshot has a labeled yellow coordinate grid "
-                f"(assist {task.loop.assist_level}); use the grid labels for precise coordinates."
-            )
-        if task.loop.assist_level == "L2" and ocr_blocks:
-            user += (
-                f"\nCyan numbered badges mark {len(ocr_blocks)} detected text "
-                'regions; you may click one with {"type": "click", "mark": <number>}.'
-            )
+            if not reflex:
+                user += (
+                    "\n\nYou claimed the goal is done. EVIDENCE TURN: show the proof on "
+                    "screen now (open the screen, counter or inventory that demonstrates "
+                    "it). Do not claim done again."
+                )
+        if not reflex:
+            if plan is not None:
+                user += f"\n\nPLAN (do these in order):\n{plan.render()}"
+            if task.loop.assist_level in ("L1", "L2"):
+                user += (
+                    f"\nThe screenshot has a labeled yellow coordinate grid "
+                    f"(assist {task.loop.assist_level}); use the grid labels "
+                    "for precise coordinates."
+                )
+            if task.loop.assist_level == "L2" and ocr_blocks:
+                user += (
+                    f"\nCyan numbered badges mark {len(ocr_blocks)} detected text "
+                    'regions; you may click one with {"type": "click", "mark": <number>}.'
+                )
         jpeg = _jpeg(model_view)
-        decision = _call_agent(agent, SYSTEM, user, [jpeg], res, pauser_obj)
+        decision = _call_agent(agent, system, user, [jpeg], res, pauser_obj)
         if decision is None:
             consecutive_model_failures += 1
             _rec_step(recorder, full, _step, thought="", actions=[], usage=_new_usage(),
@@ -401,7 +412,10 @@ def execute(
             res.outcome = "aborted"
             break
 
-        thought, actions, err = parse_model_output(decision.raw)
+        if reflex:
+            thought, actions, err = "", *parse_reflex(decision.raw)
+        else:
+            thought, actions, err = parse_model_output(decision.raw)
         step_usage = _new_usage()
         _add_usage(step_usage, decision.usage)
         if err is not None:

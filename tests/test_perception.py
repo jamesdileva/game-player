@@ -13,7 +13,7 @@ from agb.agent.base import Decision
 from agb.agent.mock import ScriptedAgent
 from agb.inputs import WindowInput
 from agb.loop import execute
-from agb.models import Click, Done, load_task_spec
+from agb.models import Click, load_task_spec
 from agb.perception import (
     HAS_OCR,
     OcrBlock,
@@ -155,7 +155,7 @@ class TestL2LoopPath:
 
         blocks = [OcrBlock(text="TITLE", x=100, y=50, w=200, h=30)]
         monkeypatch.setattr(loop_mod, "ocr_text", lambda img: blocks)
-        agent = ScriptedAgent([[Done(claim="x")]])
+        agent = ScriptedAgent(["DONE file select visible"])  # reflex format
         spec = load_task_spec(ROOT / "tasks" / "tos" / "menu-nav.yaml")
         cap = FakeCapture()
         res = execute(spec, agent, cap, WindowInput(cap), KillNever(), settle_ms=1)

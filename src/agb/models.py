@@ -123,6 +123,7 @@ class ResearchConfig(BaseModel):
 
 
 class LoopConfig(BaseModel):
+    mode: Literal["agent", "reflex"] = "agent"  # reflex: tiny prompts, one-line inputs
     time_mode: Literal["realtime", "paused"] = "realtime"
     assist_level: Literal["L0", "L1", "L2"] = "L0"
     topology: Literal["single", "hybrid"] = "single"

@@ -104,8 +104,14 @@ def run(
         research_usage = research_result.usage
         research_error = research_result.error
 
-        # PLAN phase (architecture 6 step 2)
-        plan, plan_usage, plan_seconds = make_plan(spec.goal, research_result.brief, agent, run_dir)
+        # PLAN phase (architecture 6 step 2) - skipped in reflex mode
+        plan = None
+        plan_usage = {"in_tokens": 0, "out_tokens": 0}
+        plan_seconds = 0.0
+        if spec.loop.mode == "agent":
+            plan, plan_usage, plan_seconds = make_plan(
+                spec.goal, research_result.brief, agent, run_dir
+            )
 
         def _replan_fn(progress: list[str]):
             new_plan, _, _ = replan(
