@@ -13,12 +13,9 @@ from __future__ import annotations
 import threading
 import time
 
-import pytest
 from pynput import keyboard
 
 from agb.killswitch import DEFAULT_COMBO, KillSwitch
-
-pytestmark = pytest.mark.ui
 
 
 def _canonicalizer():
