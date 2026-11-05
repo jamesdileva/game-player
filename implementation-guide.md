@@ -453,6 +453,18 @@ Register it in opencode's MCP config, then give the agent the task text. Count t
 `agb report` reads `result.json` files into SQLite and prints per (task, model, config):
 success rate, median/IQR steps, median wall time, median cost, failure-category histogram, and judge agreement. Always show the number of runs `n`, and never rank models on `n < 5`.
 
+## 14.5 Local-model performance audit (2026-11-05)
+
+Measured across 11 recorded runs (qwen2.5vl:3b on a small-VRAM GPU):
+
+- **Every call sends ~1400-1550 input tokens**; the image is ~1000 of them. With the model half-offloaded to CPU, prompt-eval dominates: 10-40 s per call before generation starts. Generation alone runs ~1-4 tok/s (text-only probe: 1.2-1.4 tok/s at 50/50 split).
+- **`ollama ps` is the diagnostic**: a 48-52% CPU/GPU split means the model + KV cache exceed VRAM and every token pays a CPU round-trip. 100% GPU during generation is normal (compute-bound on its half); the split is the anomaly to watch.
+- **num_ctx right-sizing**: 8192 doubled the KV cache (3.4 GB vs 3.2 GB footprint) with NO offload benefit - the weights don't fit either way. Default to 4096 unless a specific call needs more; raise only with the memory math done.
+- **Server-level levers** (set on the Ollama service, then restart): `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0` halve KV memory and speed long prompts - the free wins when VRAM is the binding constraint.
+- **Image size is the #1 prompt-cost lever**: the agent view is 640x480 (~1k image tokens/call). A 512x384 view cuts that ~35%; the trade is readable-text fidelity on dense UIs. A/B it per game.
+- **Generation is a minor cost**: replies are 30-165 tokens; even at 1 tok/s that's seconds. Optimize prompt-eval first, generation second.
+- **Hosted APIs sidestep all of this** - the frontier-reference lever exists as much for speed as for capability.
+
 ## 15. Common pitfalls
 
 - **DPI scaling** shifting click positions. Fix with `ctypes.windll.shcore.SetProcessDpiAwareness(2)`.

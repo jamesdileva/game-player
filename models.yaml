@@ -30,8 +30,8 @@ profiles:
     price_out: 0.0
     timeout: 300.0
     max_tokens: 700  # multi-object plans truncate at 400
-    native_ollama: true  # think:false + num_ctx 8192 via /api/chat
-    num_ctx: 8192
+    native_ollama: true  # think:false + num_ctx via /api/chat
+    num_ctx: 4096  # 8192 doubled the KV cache with no offload benefit (audited 2026-11-05)
     calibrate_frame: true  # reports coords in its internal ~1024x768 frame
   qwen3vl-2b:
     base_url: http://localhost:11434/v1
