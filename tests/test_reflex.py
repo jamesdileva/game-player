@@ -48,3 +48,17 @@ class TestReflexMessage:
     def test_recent_capped_at_two(self):
         msg = build_reflex_message("g", [], ["KEY down", "KEY x", "KEY left"])
         assert "KEY down" not in msg and "KEY x" in msg
+
+
+class TestBareKeyReplies:
+    def test_bare_enter(self):
+        actions, err = parse_reflex("ENTER")
+        assert err is None and actions[0].type == "key" and actions[0].key == "enter"
+
+    def test_bare_lowercase(self):
+        actions, err = parse_reflex("down")
+        assert err is None and actions[0].key == "down"
+
+    def test_unknown_word_still_rejected(self):
+        _, err = parse_reflex("goblin")
+        assert err == "no_input_line"

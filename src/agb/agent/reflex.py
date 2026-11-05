@@ -25,10 +25,17 @@ REFLEX_SYSTEM = (
 _INPUT_RE = re.compile(
     r"^\s*(KEY|CLICK|MARK|DONE)\b[:\s]*(.*)$", re.IGNORECASE | re.DOTALL
 )
+_KNOWN_KEYS = {
+    "enter", "return", "x", "z", "space", "esc", "tab", "shift", "ctrl",
+    "up", "down", "left", "right", "w", "a", "s", "d", "q", "e", "r",
+}
 
 
 def parse_reflex(raw: str) -> tuple[list[Action], str | None]:
     """Parse a one-line reflex reply into actions; (actions, error)."""
+    bare = (raw or "").strip().lower()
+    if bare in _KNOWN_KEYS:  # models sometimes answer the bare key name
+        return [Key(key=bare)], None
     m = _INPUT_RE.search(raw or "")
     if not m:
         return [], "no_input_line"
