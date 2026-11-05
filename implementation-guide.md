@@ -461,7 +461,7 @@ Measured across 11 recorded runs (qwen2.5vl:3b on a small-VRAM GPU):
 - **`ollama ps` is the diagnostic**: a 48-52% CPU/GPU split means the model + KV cache exceed VRAM and every token pays a CPU round-trip. 100% GPU during generation is normal (compute-bound on its half); the split is the anomaly to watch.
 - **num_ctx right-sizing**: 8192 doubled the KV cache (3.4 GB vs 3.2 GB footprint) with NO offload benefit - the weights don't fit either way. Default to 4096 unless a specific call needs more; raise only with the memory math done.
 - **Server-level levers** (set on the Ollama service, then restart): `OLLAMA_FLASH_ATTENTION=1` and `OLLAMA_KV_CACHE_TYPE=q8_0` halve KV memory and speed long prompts - the free wins when VRAM is the binding constraint.
-- **Image size is the #1 prompt-cost lever**: the agent view is 640x480 (~1k image tokens/call). A 512x384 view cuts that ~35%; the trade is readable-text fidelity on dense UIs. A/B it per game.
+- **Image size is NOT a token lever on qwen2.5-vl**: its smart-resize has a minimum-pixel floor - 512x384 tokenizes the same as 640x480 (~1460 in/call measured). The smaller view DID cut invalid outputs sharply (52% -> 13%, n=1) and speeds OCR; adopt per task, but don't expect token savings.
 - **Generation is a minor cost**: replies are 30-165 tokens; even at 1 tok/s that's seconds. Optimize prompt-eval first, generation second.
 - **Hosted APIs sidestep all of this** - the frontier-reference lever exists as much for speed as for capability.
 

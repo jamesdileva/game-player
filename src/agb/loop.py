@@ -317,6 +317,11 @@ def execute(
             ensure_foreground(capture.win)
             time.sleep(0.2)
 
+        # Paused mode: freeze BEFORE grabbing so the model sees the frozen
+        # state (e.g. a menu over an auto-playing video), then resume to act.
+        if pauser_obj is not None:
+            pauser_obj.suspend()
+
         _full, view, scale, _ts = capture.grab()
         full = _full
         ocr_blocks: list[OcrBlock] = []

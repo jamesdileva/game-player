@@ -27,6 +27,7 @@ class GamePauser:
             self.proc = psutil.Process(pid)
         except psutil.NoSuchProcess:
             self.proc = None
+        self._suspended = False  # idempotent: nested suspend/resume stay balanced
 
     @classmethod
     def from_window(cls, win) -> GamePauser | None:
@@ -46,18 +47,20 @@ class GamePauser:
             return None
 
     def suspend(self) -> None:
-        if self.proc is None:
+        if self.proc is None or self._suspended:
             return
         try:
             self.proc.suspend()
+            self._suspended = True
         except psutil.NoSuchProcess:
             pass
 
     def resume(self) -> None:
-        if self.proc is None:
+        if self.proc is None or not self._suspended:
             return
         try:
             self.proc.resume()
+            self._suspended = False
         except psutil.NoSuchProcess:
             pass
 

@@ -24,17 +24,20 @@ def _task(name: str):
 
 
 class CountingPauser:
-    """Fake pauser: counts suspend/resume pairs (headless)."""
+    """Fake pauser: tracks net suspend state (idempotent like the real one)."""
 
     def __init__(self):
         self.suspends = 0
         self.resumes = 0
+        self.on = False
 
     def suspend(self):
         self.suspends += 1
+        self.on = True
 
     def resume(self):
         self.resumes += 1
+        self.on = False
 
 
 class TestGamePauser:
@@ -68,8 +71,9 @@ class TestPausedMode:
         res = execute(spec, agent, cap, WindowInput(cap), KillNever(),
                       pauser=pauser, settle_ms=1)
         assert res.outcome == "claimed_done"
-        # 2 decide calls in the loop; the calibration is skipped (no frame_calibration)
-        assert pauser.suspends == pauser.resumes == res.model_calls
+        # frozen during decide, resumed for the action phase, never left frozen
+        assert pauser.on is False
+        assert pauser.suspends >= 2 and pauser.resumes >= 1
 
     def test_realtime_never_suspends(self):
         spec = _task("click-the-red-square")

@@ -278,6 +278,13 @@ Tasks:
 - Paused vs realtime: invalid outputs 67% -> 35% in paused mode; latency similar; Dolphin visibly froze during inference (pause mechanism visually confirmed). Neither run reached the file-select screen: the run started mid-INTRO-CUTSCENE (start-state mismatch - the model pressed arrows at an unskippable movie instead of mashing Start to skip), and the judge correctly failed both (one with an honest double-pass disagreement).
 - Next: park ON the title menu (skip the intro first), re-run; battle task after the save state.
 
+### Performance levers audited (2026-11-05, RX 6400 4GB)
+
+- Env levers maxed: flash attention active, KV q8_0 set - no offload improvement (46-54% split either way); the 3.2GB weights + Windows usage exceed 4GB VRAM, so ~1.3-1.5 tok/s generation is the local ceiling.
+- View-size lever DEBUNKED for tokens: qwen2.5-vl's smart-resize has a minimum-pixel floor - 512x384 tokenizes the same as 640x480 (~1460 in/call both). BUT the 512 view slashed invalid outputs (52% -> 13%, n=1, Dolphin updated mid-comparison) and the model visibly reasoned about menu options ("click NEW GAME"). Adopt 512x384 as the L2 default; re-measure latency in a clean session.
+- Keyboard mapping blocker noted: Dolphin pad-1 was controller-only; the model injects keyboard - keyboard bindings (or keyboard-only profile) are required for any Dolphin task.
+- Structural fix remains hosted API or a >=8GB GPU for realtime tiers.
+
 ---
 
 ## Sprint H1: Calibration micro-benchmark
