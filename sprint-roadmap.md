@@ -278,6 +278,12 @@ Tasks:
 - Paused vs realtime: invalid outputs 67% -> 35% in paused mode; latency similar; Dolphin visibly froze during inference (pause mechanism visually confirmed). Neither run reached the file-select screen: the run started mid-INTRO-CUTSCENE (start-state mismatch - the model pressed arrows at an unskippable movie instead of mashing Start to skip), and the judge correctly failed both (one with an honest double-pass disagreement).
 - Next: park ON the title menu (skip the intro first), re-run; battle task after the save state.
 
+### Sprint 6: ToS file-select SOLVED (2026-11-05, qwen3-vl:2b reflex + paused)
+
+- qwen3-vl:2b (grounding-trained, 100% GPU, reflex mode, paused, 384x288 view) reached the file-select screen in 7 steps - judge (qwen2.5vl:3b, cross-model, double-pass agree) scored success 0.9. Human-confirmed by the user.
+- Trade-offs measured: 42.9s/call (the 1200-token thinking budget costs), 67% reflex-format drift (qwen3-vl replies often need bare-key/mark fallbacks).
+- 3 distinct games through one core: fakegame, OSRS (goblin kill, human-verified), ToS (file-select, judge-verified).
+
 ### Performance levers audited (2026-11-05, RX 6400 4GB)
 
 - Env levers maxed: flash attention active, KV q8_0 set - no offload improvement (46-54% split either way); the 3.2GB weights + Windows usage exceed 4GB VRAM, so ~1.3-1.5 tok/s generation is the local ceiling.
