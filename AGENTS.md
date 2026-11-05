@@ -38,6 +38,7 @@ No sprint is "done" with failing or skipped tests, and no sprint is "done" if an
 - Tolerant parsing, strict recording: agent output is parsed leniently and every invalid output is counted, never hidden.
 - Every module ships with tests in `tests/`; the fake game (`testbed/fakegame.py`) is the deterministic testbed — prove the harness there before touching any real game.
 - The mock/scripted agent tests orchestration without model costs; never burn API tokens on tests.
+- **Testing workflow:** the suite is headless by default (`pytest -m "not ui"` — seconds to run, no hands-off needed; loop tests use the fake capture + recording-input harness). Only the `ui`-marked tests touch real windows and inject real input (~1 min) — run them in a gated session once per sprint as exit-criteria verification, not every iteration.
 
 ## Safety rules (non-negotiable)
 
