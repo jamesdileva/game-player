@@ -259,6 +259,8 @@ def execute(
     plan=None,
     replan_fn=None,
     pauser: GamePauser | None = None,
+    keys_only: bool = False,
+    controls_hint: str = "",
     max_steps: int | None = None,
     max_wall_minutes: float | None = None,
     max_cost_usd: float | None = None,
@@ -359,13 +361,25 @@ def execute(
             res.outcome = "claimed_done"
             break
 
+        keys_note = ""
+        if keys_only:
+            keys_note = (
+                "\nINPUTS: keyboard only (arrows, X = confirm, Z = cancel, "
+                "Enter = start). Pointer actions are disabled."
+            )
+        if controls_hint:
+            keys_note += f"\nCONTROLS: {controls_hint}"
         if reflex:
             user = build_reflex_message(task.goal, [b.text for b in ocr_blocks], recent)
+            if keys_note:
+                user += keys_note
             system = REFLEX_SYSTEM
         else:
             user = build_user_message(
                 task.goal, scratchpad, recent, stuck=stuck_now, patience=stuck_patience
             )
+            if keys_note:
+                user += keys_note
             system = SYSTEM
         phase = "execute"
         if evidence_left is not None:
@@ -467,6 +481,10 @@ def execute(
                 time.sleep(min(a.ms, _MAX_WAIT_MS) / 1000)
                 continue
             try:
+                if keys_only and kind in ("click", "double_click", "move", "drag"):
+                    raise InputRejected(
+                        "this game is keyboard-only; pointer actions do nothing"
+                    )
                 if kind in ("click", "double_click", "move", "drag", "scroll"):
                     a = _scale_action(a, *frame_scale)
                 if kind in ("click", "double_click", "move") and a.mark is not None:

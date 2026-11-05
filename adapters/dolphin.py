@@ -16,6 +16,12 @@ from typing import Any
 from agb.models import TaskSpec
 
 WINDOW_TITLE = "Dolphin"
+KEYS_ONLY = True  # the GCN pad is keyboard-mapped; mouse clicks do nothing in-game
+CONTROLS_HINT = (
+    "This game is controlled with KEYBOARD only: arrow keys move/aim, "
+    "X = confirm/attack, Z = cancel/back, Enter = start/pause. "
+    "Do not use CLICK - mouse clicks do nothing."
+)
 
 
 def launch() -> None:

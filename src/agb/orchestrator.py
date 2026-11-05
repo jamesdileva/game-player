@@ -123,6 +123,8 @@ def run(
             spec, agent, capture, WindowInput(capture), kill,
             recorder=recorder, plan=plan, replan_fn=_replan_fn,
             max_steps=max_steps,
+            keys_only=getattr(adapter, "KEYS_ONLY", False),
+            controls_hint=getattr(adapter, "CONTROLS_HINT", ""),
         )
         # read the game state while the window is still alive (the fake-game
         # adapter reads progress from the window title)

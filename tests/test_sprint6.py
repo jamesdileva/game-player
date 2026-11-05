@@ -153,3 +153,37 @@ class TestTaskSpecs:
         assert battle.loop.time_mode == "paused"
         assert battle.success.milestones  # milestone partial credit present
         assert stretch.tier == 4 and stretch.loop.time_mode == "paused"
+
+
+class TestKeysOnly:
+    def test_pointer_actions_rejected_in_keys_only_mode(self):
+        spec = _task("click-the-red-square")
+        agent = ScriptedAgent([[Click(x=SQUARE_CENTER[0], y=SQUARE_CENTER[1])], [Done(claim="x")]])
+        cap = FakeCapture()
+        res = execute(spec, agent, cap, WindowInput(cap), KillNever(),
+                      keys_only=True, settle_ms=1)
+        # the click is rejected (counted), the done still completes the run
+        assert res.invalid_actions >= 1
+        assert res.outcome == "claimed_done"
+
+    def test_keys_still_work_in_keys_only_mode(self):
+        from agb.models import Key
+
+        spec = _task("click-the-red-square")
+        agent = ScriptedAgent([[Key(key="x")], [Done(claim="x")]])
+        cap = FakeCapture()
+        res = execute(spec, agent, cap, WindowInput(cap), KillNever(),
+                      keys_only=True, settle_ms=1)
+        assert res.invalid_actions == 0
+        assert res.outcome == "claimed_done"
+
+    def test_controls_hint_in_prompt(self):
+        from tests.test_loop_planning import PromptCapturingAgent  # type: ignore
+
+        spec = _task("click-the-red-square")
+        agent = PromptCapturingAgent([[Done(claim="x")]])
+        cap = FakeCapture()
+        execute(spec, agent, cap, WindowInput(cap), KillNever(),
+                keys_only=True, controls_hint="arrows + X", settle_ms=1)
+        assert agent.prompts and "keyboard only" in agent.prompts[0]
+        assert "CONTROLS: arrows + X" in agent.prompts[0]
