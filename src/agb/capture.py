@@ -120,7 +120,19 @@ class WindowCapture:
         }
 
     def grab(self) -> tuple[Image.Image, Image.Image, float, float]:
-        """Returns (full_res, agent_view, scale, timestamp)."""
+        """Returns (full_res, agent_view, scale, timestamp).
+
+        Self-heals stale window handles: on failure, re-select the window by
+        title once and retry (games re-create their render surfaces).
+        """
+        try:
+            return self._grab_once()
+        except Exception:
+            if not self.refresh():
+                raise
+            return self._grab_once()
+
+    def _grab_once(self) -> tuple[Image.Image, Image.Image, float, float]:
         shot = self._sct.grab(self.rect())
         full = Image.frombytes("RGB", shot.size, shot.rgb)
         scale = min(self.max_w / full.width, self.max_h / full.height, 1.0)

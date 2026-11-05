@@ -70,7 +70,10 @@ def run(
     adapter = get_adapter(spec.game)
     run_dir = make_run_dir(runs_root, spec, agent.name)
     recorder = Recorder(run_dir)
-    recorder.start_video(capture.rect())
+    try:  # best-effort: recording never blocks a run
+        recorder.start_video(capture.rect())
+    except Exception as e:
+        print(f"[recorder] video capture unavailable: {e}")
 
     # baseline snapshot (architecture 6 step 0): the judge compares before/after
     try:
@@ -117,7 +120,10 @@ def run(
         )
         # read the game state while the window is still alive (the fake-game
         # adapter reads progress from the window title)
-        state = adapter.read_state(capture.win.title)
+        try:
+            state = adapter.read_state(capture.win.title)
+        except Exception as e:
+            state = {"stage": None, "error": f"window title unreadable: {e}"}
         success = adapter.check_success(spec, state)
 
         # JUDGE phase (architecture 6 step 5): adapter verifier + optional VLM

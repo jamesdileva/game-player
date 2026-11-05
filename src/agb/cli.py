@@ -129,9 +129,9 @@ def run(
         False, "--launch", help="Launch the game via its adapter if the window is missing"
     ),
     view_max: str = typer.Option(
-        "640x480",
+        "512x384",
         "--view-max",
-        help="Max agent view WxH; smaller views = fewer vision tokens = faster local models",
+        help="Max agent view WxH (512x384 adopted: best invalid-rate in the A/B)",
     ),
     assist: str | None = typer.Option(
         None, "--assist", help="Override the task's assist level (L0 | L1 | L2)"
