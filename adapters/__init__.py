@@ -28,7 +28,7 @@ def get_adapter(game: str) -> GameAdapter:
         from . import osrs
 
         return osrs
-    if game in ("dolphin", "tos", "melee"):
+    if game in ("dolphin", "tos", "melee", "pokemon-colo", "pokemon"):
         from . import dolphin
 
         return dolphin

@@ -1,0 +1,34 @@
+id: pokemon-colo-battle-001
+game: pokemon-colo
+title: Pokemon Colosseum - win a battle
+goal: "Win the current battle by defeating all opposing Pokemon."
+tier: 1
+mode: study
+start_state: >
+  Dolphin windowed with a save state loaded at the start of a battle
+  (the human parks the emulator there). Double battle: the player commands
+  both Espeon and Umbreon. No AI allies - every action is the model's.
+success:
+  evidence: >
+    A victory/result screen is visible, or all opposing Pokemon have fainted
+    (fainted sprites + "fainted" text), proving the battle was won.
+  evidence_step: "Stay on the result screen."
+  verifiers: [vlm]
+  milestones:
+    - name: move selected
+      check: "a move was chosen from the battle menu for at least one Pokemon"
+    - name: damage dealt
+      check: "an opposing Pokemon's HP bar visibly dropped or a damage number appeared"
+    - name: a foe fainted
+      check: "at least one opposing Pokemon fainted (sprite gone / fainted text)"
+limits:
+  max_steps: 60
+  max_wall_minutes: 40
+  max_cost_usd: 0.0
+research:
+  mode: web
+  max_minutes: 10
+loop:
+  time_mode: paused
+  assist_level: L2
+  max_stuck_events: 8
