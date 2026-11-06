@@ -385,6 +385,32 @@ def calibrate(
 
 
 @app.command()
+def report(
+    runs: Path = typer.Option(Path("runs"), "--runs", help="Root folder of run folders"),
+) -> None:
+    """Aggregate all recorded runs into report.db + report.html (no rankings at n<5)."""
+    from agb.report import build_report
+
+    summary = build_report(runs)
+    typer.echo(f"runs: {summary['total_runs']}")
+    for g in summary["groups"]:
+        rank = "" if g["ranked"] else "  (not ranked, n<5)"
+        typer.echo(
+            f"{g['task_id']:<28} {g['model']:<12} n={g['n']:<3} "
+            f"successes={g['successes']:<3} rate={g['success_rate']:.0%} "
+            f"median_steps={g['median_steps']:.0f} "
+            f"judge_agree={g['judge_agreement'] if g['judge_agreement'] is not None else '-'}"
+            f"{rank}"
+        )
+    judge = summary["judge"]
+    typer.echo(
+        f"judge agreement: {judge.agreement} over {judge.n} (FP={judge.false_positive_rate} "
+        f"FN={judge.false_negative_rate}); self-judged runs: {judge.self_judged_runs}"
+    )
+    typer.echo(f"artifacts: {summary['db']}, {summary['html']}")
+
+
+@app.command()
 def replay(run_dir: Path = typer.Argument(..., exists=True, file_okay=False)) -> None:
     """Generate (if needed) and open a run's replay page in the browser."""
     from agb.replay import generate
