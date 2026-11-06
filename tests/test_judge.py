@@ -52,10 +52,24 @@ def _recorded_run(tmp_path, n_steps: int = 6):
 
 
 class TestSelectKeyframes:
-    def test_baseline_plus_tail_plus_sample(self, tmp_path):
+    def test_baseline_plus_hot_plus_last(self, tmp_path):
+        """Change-aware selection: the biggest screen-change frame is picked."""
+        rec = Recorder(tmp_path)
+        for i in range(10):
+            color = (255, 255, 255) if i == 5 else (10, 10, 14)  # frame 5 = white flash
+            rec.log_step({"phase": "execute", "thought": f"t{i}", "actions": [],
+                          "usage": {}, "raw_reply": "", "error": None},
+                         Image.new("RGB", (40, 30), color))
+        rec.close()
+        Image.new("RGB", (10, 10)).save(tmp_path / "baseline.jpg")
+        frames = select_keyframes(tmp_path, max_frames=3)
+        names = [f.name for f in frames]
+        assert names[0] == "baseline.jpg"
+        assert names[-1] == "000009.jpg"  # final state
+        assert "000005.jpg" in names  # the white-flash frame = highest change
+
+    def test_baseline_plus_tail(self, tmp_path):
         _recorded_run(tmp_path, n_steps=10)
-        (tmp_path / "baseline.jpg").write_bytes(b"fake")
-        # make baseline a real image (judge reads bytes)
         Image.new("RGB", (10, 10)).save(tmp_path / "baseline.jpg")
         frames = select_keyframes(tmp_path, max_frames=8)
         assert len(frames) <= 8

@@ -34,8 +34,24 @@ class Verdict:
     error: str | None = None
 
 
+def _frame_change(path_a: Path, path_b: Path) -> int:
+    """Cheap pixel-change estimate between two frames (64x48 grayscale)."""
+    try:
+        a = Image.open(path_a).convert("L").resize((64, 48))
+        b = Image.open(path_b).convert("L").resize((64, 48))
+        pa, pb = list(a.getdata()), list(b.getdata())
+        return sum(1 for x, y in zip(pa, pb, strict=False) if abs(x - y) > 24)
+    except Exception:
+        return 0
+
+
 def select_keyframes(run_dir: str | Path, max_frames: int = 3) -> list[Path]:
-    """Baseline + claim/evidence tail + uniform sample of the run's frames."""
+    """Baseline + highest-change frames + final state.
+
+    Change-aware: the frames where the screen changed most are the moments
+    something happened (damage, faints, menu transitions) - the Colosseum
+    judge false-negative showed that tail-only selection misses them.
+    """
     run_dir = Path(run_dir)
     steps: list[dict] = []
     steps_file = run_dir / "steps.jsonl"
@@ -50,18 +66,39 @@ def select_keyframes(run_dir: str | Path, max_frames: int = 3) -> list[Path]:
     if not existing:
         return []
 
+    # rank interior frames by change vs their predecessor
+    changes: list[tuple[int, int]] = []
+    for i in range(1, len(existing)):
+        changes.append((i, _frame_change(existing[i - 1], existing[i])))
+    changes.sort(key=lambda t: -t[1])
+
     chosen: list[Path] = []
+    seen: set[int] = set()
     baseline = run_dir / "baseline.jpg"
-    if baseline.exists():
+    if baseline.exists() and len(existing) > 1:
         chosen.append(baseline)
-    tail = existing[-3:]  # the claim and evidence frames
-    rest = [p for p in existing if p not in tail]
-    budget = max_frames - len(chosen) - len(tail)
-    if rest and budget > 0:
-        step = max(1, len(rest) // budget)
-        chosen.extend(rest[::step][:budget])
-    chosen.extend(tail)
-    return chosen[:max_frames]
+        seen.add(-1)
+    last_idx = len(existing) - 1
+    seen.add(last_idx)
+
+    # the moments where the screen changed most are the moments something
+    # happened (damage, faints, menu transitions)
+    hot_budget = max(0, max_frames - len(chosen) - 1)  # reserve 1 for the final frame
+    hot = [i for i, _chg in changes if i not in seen][:hot_budget]
+    for i in sorted(hot):
+        chosen.append(existing[i])
+        seen.add(i)
+    chosen.append(existing[last_idx])
+
+    # dedupe preserving order, cap
+    out: list[Path] = []
+    seen_paths: set[Path] = set()
+    for p in chosen:
+        if p in seen_paths:
+            continue
+        seen_paths.add(p)
+        out.append(p)
+    return out[:max_frames]
 
 
 def _verdict_prompt(task: TaskSpec, frame_count: int, frame_names: list[str]) -> str:
