@@ -261,6 +261,7 @@ def execute(
     pauser: GamePauser | None = None,
     keys_only: bool = False,
     controls_hint: str = "",
+    key_map: dict | None = None,
     max_steps: int | None = None,
     max_wall_minutes: float | None = None,
     max_cost_usd: float | None = None,
@@ -498,7 +499,10 @@ def execute(
                 elif kind == "drag":
                     inp.drag(a.x1, a.y1, a.x2, a.y2, scale)
                 elif kind == "key":
-                    inp.key(a.key, a.hold_ms)
+                    key_name = a.key.lower()
+                    if key_map:
+                        key_name = key_map.get(key_name, key_name)
+                    inp.key(key_name, a.hold_ms)
                 elif kind == "type":
                     inp.type_text(a.text)
                 elif kind == "scroll":

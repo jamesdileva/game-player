@@ -13,7 +13,7 @@ from tests.fakes import FakeCapture, KillNever
 from agb.agent.mock import ScriptedAgent
 from agb.inputs import WindowInput
 from agb.loop import execute
-from agb.models import Click, Done, load_task_spec
+from agb.models import Click, Done, Key, load_task_spec
 from agb.pause import GamePauser
 
 SQUARE_CENTER = (430, 330)
@@ -167,7 +167,6 @@ class TestKeysOnly:
         assert res.outcome == "claimed_done"
 
     def test_keys_still_work_in_keys_only_mode(self):
-        from agb.models import Key
 
         spec = _task("click-the-red-square")
         agent = ScriptedAgent([[Key(key="x")], [Done(claim="x")]])

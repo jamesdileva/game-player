@@ -125,6 +125,7 @@ def run(
             max_steps=max_steps,
             keys_only=getattr(adapter, "KEYS_ONLY", False),
             controls_hint=getattr(adapter, "CONTROLS_HINT", ""),
+            key_map=getattr(adapter, "KEY_MAP", None),
         )
         # read the game state while the window is still alive (the fake-game
         # adapter reads progress from the window title)

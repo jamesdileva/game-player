@@ -18,10 +18,15 @@ from agb.models import TaskSpec
 WINDOW_TITLE = "Dolphin"
 KEYS_ONLY = True  # the GCN pad is keyboard-mapped; mouse clicks do nothing in-game
 CONTROLS_HINT = (
-    "This game is controlled with KEYBOARD only: arrow keys move/aim, "
-    "X = confirm/attack, Z = cancel/back, Enter = start/pause. "
+    "Keyboard mapping for this game: the X key is the game's A button "
+    "(confirm/attack) - to press A, send KEY x. The Z key is the game's "
+    "B button (cancel/back) - send KEY z. The Enter key is Start - send "
+    "KEY enter. Arrow keys move the cursor/character. "
     "Do not use CLICK - mouse clicks do nothing."
 )
+# dialect translation: models speak GameCube (KEY a = the A button);
+# this maps their intent onto the keyboard bindings above
+KEY_MAP = {"a": "x", "b": "z", "start": "enter"}
 
 
 def launch() -> None:
