@@ -72,8 +72,16 @@ def _prepare_capture(adapter, window_title: str | None, launch: bool, vw: int, v
 
 
 def _apply_task_overrides(
-    spec, assist: str | None, research: str | None, time_mode: str | None = None
+    spec, assist: str | None, research: str | None, time_mode: str | None = None,
+    mode: str | None = None,
 ):
+    if mode is not None:
+        if mode not in ("agent", "reflex"):
+            typer.secho(
+                f"--mode must be agent or reflex, got {mode!r}", fg=typer.colors.RED
+            )
+            raise typer.Exit(1)
+        spec.loop.mode = mode
     if time_mode is not None:
         if time_mode not in ("realtime", "paused"):
             typer.secho(
@@ -145,6 +153,9 @@ def run(
     time_mode: str | None = typer.Option(
         None, "--time-mode", help="Override the task's time mode (realtime | paused)"
     ),
+    mode: str | None = typer.Option(
+        None, "--mode", help="Override the loop mode (agent | reflex)"
+    ),
 ) -> None:
     """Run one task with one agent; prints a results row and persists the full run folder.
 
@@ -160,7 +171,7 @@ def run(
     from agb.models import load_task_spec
 
     spec = load_task_spec(task)
-    _apply_task_overrides(spec, assist, research, time_mode)
+    _apply_task_overrides(spec, assist, research, time_mode, mode)
     adapter = get_adapter(spec.game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
