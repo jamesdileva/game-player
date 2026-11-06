@@ -284,6 +284,13 @@ Tasks:
 - Trade-offs measured: 42.9s/call (the 1200-token thinking budget costs), 67% reflex-format drift (qwen3-vl replies often need bare-key/mark fallbacks).
 - 3 distinct games through one core: fakegame, OSRS (goblin kill, human-verified), ToS (file-select, judge-verified).
 
+### Sprint 6: Colosseum battle results (2026-11-05/06, qwen2.5vl:3b reflex+paused, keys-only)
+
+- **USER-WITNESSED (2026-11-06)**: in the 12-step reflex run the model SELECTED moves (bite queued), dealt damage (opposing Pokemon 1 fainted, Pokemon 2 half HP) - the turn-based battle loop WORKS end-to-end: reflex one-liners + dialect translation + paused freezing + keys-only all functioned in a real battle.
+- The run then burned its remaining steps on the exp-earned modal sequence (each faint triggers multi-screen exp dialogs needing presses) and capped before finishing the 2nd foe. Label: partial (battle not won); milestones damage/faint: TRUE per user testimony.
+- **JUDGE FALSE-NEGATIVE documented**: the judge scored "no move selected, no damage dealt" - its keyframes (baseline + last 3 = exp screens) missed the mid-battle damage/faint frames. Fix queued: include high-screen-change frames in judge keyframe selection (Sprint 4 note).
+- Re-run recipe: same save state, `--max-steps 30` - the extra steps cover the exp modals; the battle should complete.
+
 ### Sprint 6: Colosseum battle results (2026-11-05/06, qwen3-vl:2b reflex+paused, keys-only)
 
 - **The keyboard chain works**: with keys-only enforcement (pointer actions rejected, counted) the model navigated the battle menus via keyboard - the judge (cross-model, double-pass agree) recorded it selecting an item (Super Potion) from the ITEMS submenu. Real menu interaction on a 3D battle scene.
