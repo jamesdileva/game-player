@@ -385,6 +385,114 @@ def calibrate(
 
 
 @app.command()
+def serve(
+    task: Path = typer.Argument(
+        ..., exists=True, dir_okay=False, readable=True, help="Task spec YAML"
+    ),
+    max_steps: int | None = typer.Option(None, min=1, help="Override the task's step cap"),
+    window_title: str | None = typer.Option(
+        None, help="Override the window title to capture"
+    ),
+    view_max: str = typer.Option(
+        "384x288", "--view-max", help="Max agent view WxH served to MCP clients"
+    ),
+    judge: str | None = typer.Option(
+        None, "--judge", help="Judge model profile (runs after the episode ends)"
+    ),
+) -> None:
+    """Mode B: serve a game as MCP tools over stdio (architecture 5.5).
+
+    An MCP client (another agent) drives the game through
+    screenshot/click/key/note/done; the harness records every call, enforces
+    the caps, and judges the recording when the episode ends.
+    """
+    ensure_dpi_awareness()
+    from adapters import get_adapter
+
+    from agb.killswitch import KillSwitch
+    from agb.mcp_server import build_server, load_session
+    from agb.models import load_task_spec
+    from agb.recorder import Recorder
+
+    spec = load_task_spec(task)
+    adapter = get_adapter(spec.game)
+    try:
+        vw, vh = (int(v) for v in view_max.lower().split("x"))
+    except ValueError:
+        typer.secho(f"--view-max must be WxH, got {view_max!r}", fg=typer.colors.RED)
+        raise typer.Exit(1) from None
+
+    kill = KillSwitch()
+    if not kill.armed:
+        typer.secho("Kill switch failed to arm; refusing to run.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    title = window_title or adapter.WINDOW_TITLE
+    capture = _open_capture(title, vw, vh)
+    if capture is None:
+        typer.secho(
+            f"No window matching {title!r}. Launch and park the game first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    run_dir = Path("runs") / f"{stamp}_{spec.id}_modeB"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    recorder = Recorder(run_dir)
+    try:
+        recorder.start_video(capture.rect())
+    except Exception:
+        pass
+
+    session = load_session(task, window_title, max_steps, view_max, recorder=recorder)
+    session.capture = capture  # use the same capture the recorder was aimed at
+    server = build_server(session)
+    typer.echo(
+        f"Mode B serving: {spec.id} on {title!r} "
+        f"(steps cap {session.max_steps}, keys_only={session.keys_only}). "
+        "Judging runs when the client disconnects.",
+        err=True,
+    )
+
+    try:
+        server.run()  # stdio transport; blocks until the client disconnects
+    finally:
+        recorder.close()
+
+    outcome = "done" if session.done_claim else "incomplete"
+    state = {}
+    try:
+        state = adapter.read_state(capture.win.title)
+    except Exception:
+        pass
+    success = adapter.check_success(spec, state)
+    record = {
+        "run_id": run_dir.name,
+        "task_id": spec.id,
+        "model": "mcp-client",
+        "agent_mode": "B",
+        "mode": "paused" if spec.loop.time_mode == "paused" else "realtime",
+        "outcome": outcome,
+        "success": success,
+        "adapter_state": state,
+        "steps": session.tool_calls,
+        "invalid_rate": 0.0,
+        "done_claim": session.done_claim,
+        "verdict": None,
+        "verifiers": ["adapter"] if success is not None else [],
+    }
+    (run_dir / "result.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    if judge:
+        typer.echo(
+            f"note: --judge {judge!r} scores this recording via "
+            "`agb calibrate --judge` after the episode", err=True,
+        )
+    typer.echo(f"Mode B episode recorded: {run_dir}", err=True)
+    result_row(record)
+
+
+@app.command()
 def report(
     runs: Path = typer.Option(Path("runs"), "--runs", help="Root folder of run folders"),
 ) -> None:
