@@ -284,6 +284,12 @@ Tasks:
 - Trade-offs measured: 42.9s/call (the 1200-token thinking budget costs), 67% reflex-format drift (qwen3-vl replies often need bare-key/mark fallbacks).
 - 3 distinct games through one core: fakegame, OSRS (goblin kill, human-verified), ToS (file-select, judge-verified).
 
+### Sprint 6: Colosseum battle results (2026-11-05/06, qwen3-vl:2b reflex+paused, keys-only)
+
+- **The keyboard chain works**: with keys-only enforcement (pointer actions rejected, counted) the model navigated the battle menus via keyboard - the judge (cross-model, double-pass agree) recorded it selecting an item (Super Potion) from the ITEMS submenu. Real menu interaction on a 3D battle scene.
+- **But 82% invalid outputs** (384x288 view of a dense 3D battle is hard for the 2B) and no attack was completed - judge `partial` 0.5, correct.
+- The gap to closing a battle: multi-step menu sequencing (Attack -> move -> target) at 2B scale on a downscaled dense scene. Next levers: L2 badges on battle-menu text, a larger view for battles, or the frontier reference.
+
 ### Performance levers audited (2026-11-05, RX 6400 4GB)
 
 - Env levers maxed: flash attention active, KV q8_0 set - no offload improvement (46-54% split either way); the 3.2GB weights + Windows usage exceed 4GB VRAM, so ~1.3-1.5 tok/s generation is the local ceiling.
