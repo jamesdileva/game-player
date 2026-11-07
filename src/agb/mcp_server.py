@@ -25,12 +25,18 @@ from agb.models import TaskSpec, load_task_spec
 
 @dataclass
 class ModeBSession:
-    """Everything one Mode B episode needs: game wiring, caps, recording."""
+    """Mode B episode state. Game wiring is LAZY: MCP clients (e.g. ZCode)
+    spawn the server at app startup, long before the game window exists, so
+    capture/input connect on the first tool call instead."""
 
     spec: TaskSpec
-    capture: object
-    inp: object
-    recorder: object
+    window_title: str = ""
+    view_max: tuple[int, int] = (384, 288)
+    capture: object = None
+    inp: object = None
+    recorder: object = None
+    wired: bool = False
+    wire_error: str | None = None
     keys_only: bool = False
     controls_hint: str = ""
     key_map: dict | None = None
@@ -40,6 +46,31 @@ class ModeBSession:
     tool_calls: int = 0
     scratchpad: str = ""
     done_claim: str | None = None
+
+    def ensure_wired(self) -> str | None:
+        """Connect capture/input on first use. Returns an error or None."""
+        if self.wired:
+            return None
+        try:
+            from adapters import get_adapter
+
+            from agb.capture import WindowCapture
+            from agb.inputs import WindowInput
+
+            adapter = get_adapter(self.spec.game)
+            vw, vh = self.view_max
+            self.capture = WindowCapture(
+                self.window_title or adapter.WINDOW_TITLE, max_w=vw, max_h=vh
+            )
+            self.inp = WindowInput(self.capture)
+            self.keys_only = getattr(adapter, "KEYS_ONLY", False)
+            self.controls_hint = getattr(adapter, "CONTROLS_HINT", "")
+            self.key_map = getattr(adapter, "KEY_MAP", None)
+            self.wired = True
+            return None
+        except Exception as e:
+            self.wire_error = f"game window not connected: {e}"
+            return self.wire_error
 
     def steps_left(self) -> int:
         return max(0, self.max_steps - self.tool_calls)
@@ -71,6 +102,9 @@ def build_server(session: ModeBSession) -> MCPServer:
         refusal = session.check_caps()
         if refusal:
             return {"refused": refusal}
+        wire_err = session.ensure_wired()
+        if wire_err:
+            return {"refused": wire_err, "hint": "launch the game, then retry"}
         full, view, scale, _ts = session.capture.grab()
         session.tool_calls += 1
         session.recorder.log_step(
@@ -97,6 +131,9 @@ def build_server(session: ModeBSession) -> MCPServer:
         refusal = session.check_caps()
         if refusal:
             return {"refused": refusal}
+        wire_err = session.ensure_wired()
+        if wire_err:
+            return {"refused": wire_err}
         if session.keys_only:
             session.tool_calls += 1
             session.recorder.log_step(
@@ -120,6 +157,9 @@ def build_server(session: ModeBSession) -> MCPServer:
         refusal = session.check_caps()
         if refusal:
             return {"refused": refusal}
+        wire_err = session.ensure_wired()
+        if wire_err:
+            return {"refused": wire_err}
         key_name = name.lower()
         if session.key_map:
             key_name = session.key_map.get(key_name, key_name)
@@ -169,29 +209,21 @@ def load_session(
     view_max: str = "384x288",
     recorder=None,
 ) -> ModeBSession:
-    """Wire a Mode B session from a task spec (used by agb serve)."""
-    from adapters import get_adapter
+    """Build a lazy Mode B session from a task spec (used by agb serve).
 
-    from agb.capture import WindowCapture
-    from agb.inputs import WindowInput
-
+    The game is NOT contacted here: MCP servers start before the game runs,
+    so capture/input connect on the first tool call.
+    """
     ensure_dpi_awareness()
-    spec = load_task_spec(task_path)
-    adapter = get_adapter(spec.game)
     vw, vh = (int(v) for v in view_max.lower().split("x"))
-    capture = WindowCapture(window_title or adapter.WINDOW_TITLE, max_w=vw, max_h=vh)
-    session = ModeBSession(
-        spec=spec,
-        capture=capture,
-        inp=WindowInput(capture),
+    return ModeBSession(
+        spec=load_task_spec(task_path),
+        window_title=window_title or "",
+        view_max=(vw, vh),
         recorder=recorder,
-        keys_only=getattr(adapter, "KEYS_ONLY", False),
-        controls_hint=getattr(adapter, "CONTROLS_HINT", ""),
-        key_map=getattr(adapter, "KEY_MAP", None),
-        max_steps=max_steps or spec.limits.max_steps,
-        max_wall_minutes=spec.limits.max_wall_minutes,
+        max_steps=max_steps or 30,
+        max_wall_minutes=40.0,
     )
-    return session
 
 
 class _NullRecorder:

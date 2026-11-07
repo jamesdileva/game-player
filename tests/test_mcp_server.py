@@ -27,6 +27,7 @@ def session():
         capture=FakeCapture(),
         inp=h.inp,
         recorder=rec,
+        wired=True,  # pre-wired: headless tests have no real window
         keys_only=False,
         max_steps=5,
         max_wall_minutes=5.0,
@@ -91,3 +92,20 @@ class TestModeBTools:
         _run(server.call_tool("note", {"text": "goblin on the left"}))
         out = _run(server.call_tool("screenshot", {}))
         assert _payload(out)["scratchpad"] == "goblin on the left"
+
+
+class TestLazyWiring:
+    def test_unwired_session_reports_missing_window(self, session, server):
+        """A session that cannot connect returns a refusal with a hint."""
+        session.wired = False
+        session.window_title = "NoSuchWindow123"
+        out = _run(server.call_tool("screenshot", {}))
+        payload = _payload(out)
+        assert "refused" in payload
+        assert "not connected" in payload["refused"]
+        assert "retry" in payload.get("hint", "")
+
+    def test_wired_session_skips_ensure(self, session, server):
+        session.wired = True
+        out = _run(server.call_tool("screenshot", {}))
+        assert "image_base64" in _payload(out)
