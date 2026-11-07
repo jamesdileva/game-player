@@ -67,6 +67,11 @@ class ModeBSession:
             self.controls_hint = getattr(adapter, "CONTROLS_HINT", "")
             self.key_map = getattr(adapter, "KEY_MAP", None)
             self.wired = True
+            if self.recorder is not None:  # start the mp4 once we can aim it
+                try:
+                    self.recorder.start_video(self.capture.rect())
+                except Exception:
+                    pass
             return None
         except Exception as e:
             self.wire_error = f"game window not connected: {e}"

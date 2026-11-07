@@ -427,30 +427,19 @@ def serve(
         typer.secho("Kill switch failed to arm; refusing to run.", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-    title = window_title or adapter.WINDOW_TITLE
-    capture = _open_capture(title, vw, vh)
-    if capture is None:
-        typer.secho(
-            f"No window matching {title!r}. Launch and park the game first.",
-            fg=typer.colors.RED,
-        )
-        raise typer.Exit(1)
-
+    # NO eager capture here: MCP clients spawn the server before the game is
+    # up. The session connects lazily on the first tool call, and the video
+    # recording starts once the game is wired. stdout must stay clean (stdio).
     stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     run_dir = Path("runs") / f"{stamp}_{spec.id}_modeB"
     run_dir.mkdir(parents=True, exist_ok=True)
     recorder = Recorder(run_dir)
-    try:
-        recorder.start_video(capture.rect())
-    except Exception:
-        pass
 
     session = load_session(task, window_title, max_steps, view_max, recorder=recorder)
-    session.capture = capture  # use the same capture the recorder was aimed at
     server = build_server(session)
     typer.echo(
-        f"Mode B serving: {spec.id} on {title!r} "
-        f"(steps cap {session.max_steps}, keys_only={session.keys_only}). "
+        f"Mode B serving: {spec.id} (steps cap {session.max_steps}, "
+        f"game connects lazily on first tool call). "
         "Judging runs when the client disconnects.",
         err=True,
     )
@@ -462,10 +451,11 @@ def serve(
 
     outcome = "done" if session.done_claim else "incomplete"
     state = {}
-    try:
-        state = adapter.read_state(capture.win.title)
-    except Exception:
-        pass
+    if session.wired:  # the game was connected: read its final state
+        try:
+            state = adapter.read_state(session.capture.win.title)
+        except Exception:
+            pass
     success = adapter.check_success(spec, state)
     record = {
         "run_id": run_dir.name,
