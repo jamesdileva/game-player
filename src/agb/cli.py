@@ -399,8 +399,13 @@ def serve(
     judge: str | None = typer.Option(
         None, "--judge", help="Judge model profile (runs after the episode ends)"
     ),
+    transport: str = typer.Option(
+        "stdio", "--transport",
+        help="stdio (spawned by MCP clients) or http (persistent, step-by-step)",
+    ),
+    port: int = typer.Option(8931, "--port", help="HTTP transport port"),
 ) -> None:
-    """Mode B: serve a game as MCP tools over stdio (architecture 5.5).
+    """Mode B: serve a game as MCP tools (architecture 5.5).
 
     An MCP client (another agent) drives the game through
     screenshot/click/key/note/done; the harness records every call, enforces
@@ -445,7 +450,11 @@ def serve(
     )
 
     try:
-        server.run()  # stdio transport; blocks until the client disconnects
+        if transport == "http":
+            typer.echo(f"Mode B HTTP serving on http://127.0.0.1:{port}/mcp", err=True)
+            server.run_streamable_http_async(host="127.0.0.1", port=port)
+        else:
+            server.run()  # stdio; blocks until the client disconnects
     finally:
         recorder.close()
 
