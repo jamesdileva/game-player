@@ -1,0 +1,20 @@
+{
+  "mcp": {
+    "servers": {
+      "anygame": {
+        "type": "stdio",
+        "command": "C:\\Users\\j\\Projects\\game-player\\.venv\\Scripts\\agb.exe",
+        "args": [
+          "serve",
+          "tasks/pokemon/colo-battle.yaml",
+          "--window-title",
+          "Dolphin",
+          "--max-steps",
+          "20"
+        ],
+        "cwd": "C:\\Users\\j\\Projects\\game-player",
+        "timeoutMs": 60000
+      }
+    }
+  }
+}
