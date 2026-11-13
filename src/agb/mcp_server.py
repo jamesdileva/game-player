@@ -207,6 +207,22 @@ def build_server(session: ModeBSession) -> MCPServer:
     return server
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_task_path(task_path: str | Path) -> Path:
+    """Resolve a task path against the repo root when the relative path
+    doesn't exist (MCP clients spawn us from THEIR working directory, so
+    relative config paths land elsewhere - do not depend on cwd)."""
+    p = Path(task_path)
+    if p.exists():
+        return p
+    alt = _REPO_ROOT / task_path
+    if alt.exists():
+        return alt
+    return p  # let load_task_spec raise the familiar error
+
+
 def load_session(
     task_path: str | Path,
     window_title: str | None,
@@ -222,7 +238,7 @@ def load_session(
     ensure_dpi_awareness()
     vw, vh = (int(v) for v in view_max.lower().split("x"))
     return ModeBSession(
-        spec=load_task_spec(task_path),
+        spec=load_task_spec(_resolve_task_path(task_path)),
         window_title=window_title or "",
         view_max=(vw, vh),
         recorder=recorder,

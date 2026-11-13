@@ -387,7 +387,7 @@ def calibrate(
 @app.command()
 def serve(
     task: Path = typer.Argument(
-        ..., exists=True, dir_okay=False, readable=True, help="Task spec YAML"
+        ..., dir_okay=False, help="Task spec YAML (resolved against the repo root if relative)"
     ),
     max_steps: int | None = typer.Option(None, min=1, help="Override the task's step cap"),
     window_title: str | None = typer.Option(
@@ -410,11 +410,11 @@ def serve(
     from adapters import get_adapter
 
     from agb.killswitch import KillSwitch
-    from agb.mcp_server import build_server, load_session
+    from agb.mcp_server import _resolve_task_path, build_server, load_session
     from agb.models import load_task_spec
     from agb.recorder import Recorder
 
-    spec = load_task_spec(task)
+    spec = load_task_spec(_resolve_task_path(task))
     adapter = get_adapter(spec.game)
     try:
         vw, vh = (int(v) for v in view_max.lower().split("x"))
