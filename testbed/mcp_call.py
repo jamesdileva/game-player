@@ -26,9 +26,10 @@ async def main() -> None:
     a = p.parse_args()
 
     from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
+    from mcp.client.streamable_http import streamable_http_client
 
-    async with streamablehttp_client(a.url) as (read, write, _):
+    async with streamable_http_client(a.url) as streams:
+        read, write = streams[0], streams[1]
         async with ClientSession(read, write) as s:
             await s.initialize()
             args: dict = {}

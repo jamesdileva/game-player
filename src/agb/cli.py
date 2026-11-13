@@ -39,14 +39,16 @@ def _open_capture(title: str, max_w: int = 1280, max_h: int = 720):
 
 
 def result_row(record: dict) -> None:
+    def g(k, d):
+        return record.get(k, d)
     typer.echo(
-        f"{record['task_id']:<28} {record['model']:<12} {record['outcome']:<12} "
-        f"success={record['success']!s:<5} steps={record['steps']:<3} "
-        f"invalid={record['invalid_rate']:.0%} stuck={record['stuck_events']} "
-        f"avg_ms={record['avg_latency_ms']:.0f} "
-        f"tok={record['tokens_in']}/{record['tokens_out']} cost=${record['cost_usd']:.4f}"
+        f"{g('task_id', ''):<28} {g('model', ''):<12} {g('outcome', ''):<12} "
+        f"success={g('success', False)!s:<5} steps={g('steps', 0):<3} "
+        f"invalid={g('invalid_rate', 0):.0%} stuck={g('stuck_events', 0)} "
+        f"avg_ms={g('avg_latency_ms', 0):.0f} "
+        f"tok={g('tokens_in', 0)}/{g('tokens_out', 0)} cost=${g('cost_usd', 0):.4f}"
     )
-    typer.echo(f"artifacts: runs/{record['run_id']}")
+    typer.echo(f"artifacts: runs/{g('run_id', '')}")
 
 FAILURE_CATEGORIES = (
     "research_wrong", "plan_infeasible", "perception", "grounding",
@@ -452,7 +454,7 @@ def serve(
     try:
         if transport == "http":
             typer.echo(f"Mode B HTTP serving on http://127.0.0.1:{port}/mcp", err=True)
-            server.run_streamable_http_async(host="127.0.0.1", port=port)
+            server.run(transport="streamable-http", host="127.0.0.1", port=port)
         else:
             server.run()  # stdio; blocks until the client disconnects
     finally:

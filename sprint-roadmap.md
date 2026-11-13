@@ -295,6 +295,7 @@ Tasks:
 
 - **The keyboard chain works**: with keys-only enforcement (pointer actions rejected, counted) the model navigated the battle menus via keyboard - the judge (cross-model, double-pass agree) recorded it selecting an item (Super Potion) from the ITEMS submenu. Real menu interaction on a 3D battle scene.
 - **But 82% invalid outputs** (384x288 view of a dense 3D battle is hard for the 2B) and no attack was completed - judge `partial` 0.5, correct.
+- **UPDATE (user-witnessed, Mode B run)**: the later reflex+paused run proved the full interaction chain live - Umbreon's move menu -> move selected (SECRET POWER) -> the target-selection UI (blue arrow) appeared -> Espeon's move menu was reached. The run stopped 2-3 inputs short of confirmed damage (step budget, by choice). User assessment: PASS - a larger smarter model completes this trivially.
 - The gap to closing a battle: multi-step menu sequencing (Attack -> move -> target) at 2B scale on a downscaled dense scene. Next levers: L2 badges on battle-menu text, a larger view for battles, or the frontier reference.
 
 ### Performance levers audited (2026-11-05, RX 6400 4GB)
