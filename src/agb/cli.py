@@ -9,7 +9,7 @@ from pathlib import Path
 
 import typer
 
-from agb.config import ensure_dpi_awareness
+from agb.config import RUNS_DIR, ensure_dpi_awareness
 
 # adapters/ lives at the repo root (deliberately outside the installed package);
 # make it importable for the console-script entry point.
@@ -198,7 +198,7 @@ def run(
     from agb.orchestrator import run as run_orchestrated
 
     record = run_orchestrated(
-        spec, build_agent(model), capture, kill, Path("runs"),
+        spec, build_agent(model), capture, kill, RUNS_DIR,
         launched=launched, view_max=(vw, vh), max_steps=max_steps,
         research_mode=research,
         judge_agent=build_agent(judge) if judge else None,
@@ -264,7 +264,7 @@ def matrix(
             spec = load_task_spec(task)  # fresh spec per run
             _apply_task_overrides(spec, assist, research, time_mode)
             record = run_orchestrated(
-                spec, build_agent(model), capture, kill, Path("runs"),
+                spec, build_agent(model), capture, kill, RUNS_DIR,
                 launched=launched, view_max=(vw, vh), max_steps=max_steps,
                 research_mode=research, judge_agent=judge_agent,
             )
@@ -302,7 +302,7 @@ def label(
 @app.command()
 def calibrate(
     judge: str = typer.Option(..., "--judge", help="Model profile to use as the VLM judge"),
-    runs: Path = typer.Option(Path("runs"), "--runs", help="Root folder of run folders"),
+    runs: Path = typer.Option(RUNS_DIR, "--runs", help="Root folder of run folders"),
 ) -> None:
     """Judge recorded runs and measure agreement with ground-truth labels.
 
@@ -437,12 +437,18 @@ def serve(
     # NO eager capture here: MCP clients spawn the server before the game is
     # up. The session connects lazily on the first tool call, and the video
     # recording starts once the game is wired. stdout must stay clean (stdio).
-    stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
-    run_dir = Path("runs") / f"{stamp}_{spec.id}_modeB"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    recorder = Recorder(run_dir)
+    def _make_run_dir():
+        from agb.orchestrator import make_run_dir
 
-    session = load_session(task, window_title, max_steps, view_max, recorder=recorder)
+        d = make_run_dir(RUNS_DIR, spec, "mcp-client")
+        rec = Recorder(d)
+        return d, rec
+
+    # run dir + recorder are created LAZILY on the first tool call: MCP
+    # clients spawn this server on every session start/reload, and an eager
+    # run folder per spawn floods runs/ with empty episodes
+    session = load_session(task, window_title, max_steps, view_max,
+                           recorder_factory=_make_run_dir)
     server = build_server(session)
     typer.echo(
         f"Mode B serving: {spec.id} (steps cap {session.max_steps}, "
@@ -458,7 +464,8 @@ def serve(
         else:
             server.run()  # stdio; blocks until the client disconnects
     finally:
-        recorder.close()
+        if session.recorder is not None:  # only exists if the episode started
+            session.recorder.close()
 
     outcome = "done" if session.done_claim else "incomplete"
     state = {}
@@ -469,7 +476,7 @@ def serve(
             pass
     success = adapter.check_success(spec, state)
     record = {
-        "run_id": run_dir.name,
+        "run_id": session.run_dir.name if session.run_dir else "",
         "task_id": spec.id,
         "model": "mcp-client",
         "agent_mode": "B",
@@ -483,19 +490,23 @@ def serve(
         "verdict": None,
         "verifiers": ["adapter"] if success is not None else [],
     }
-    (run_dir / "result.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+    if session.run_dir is not None:
+        (session.run_dir / "result.json").write_text(
+            json.dumps(record, indent=2), encoding="utf-8"
+        )
     if judge:
         typer.echo(
             f"note: --judge {judge!r} scores this recording via "
             "`agb calibrate --judge` after the episode", err=True,
         )
-    typer.echo(f"Mode B episode recorded: {run_dir}", err=True)
+    if session.run_dir is not None:
+        typer.echo(f"Mode B episode recorded: {session.run_dir}", err=True)
     result_row(record)
 
 
 @app.command()
 def report(
-    runs: Path = typer.Option(Path("runs"), "--runs", help="Root folder of run folders"),
+    runs: Path = typer.Option(RUNS_DIR, "--runs", help="Root folder of run folders"),
 ) -> None:
     """Aggregate all recorded runs into report.db + report.html (no rankings at n<5)."""
     from agb.report import build_report

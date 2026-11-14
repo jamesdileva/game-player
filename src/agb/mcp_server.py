@@ -35,6 +35,8 @@ class ModeBSession:
     capture: object = None
     inp: object = None
     recorder: object = None
+    run_dir: Path | None = None
+    recorder_factory: object = None  # callable -> (run_dir, Recorder); called on wire
     wired: bool = False
     wire_error: str | None = None
     keys_only: bool = False
@@ -66,6 +68,8 @@ class ModeBSession:
             self.keys_only = getattr(adapter, "KEYS_ONLY", False)
             self.controls_hint = getattr(adapter, "CONTROLS_HINT", "")
             self.key_map = getattr(adapter, "KEY_MAP", None)
+            if self.recorder is None and self.recorder_factory is not None:
+                self.run_dir, self.recorder = self.recorder_factory()
             self.wired = True
             if self.recorder is not None:  # start the mp4 once we can aim it
                 try:

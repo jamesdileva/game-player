@@ -12,6 +12,13 @@ from pydantic import BaseModel, Field
 
 load_dotenv()  # reads .env if present; never overrides real environment variables
 
+# Repo-root-relative artifacts (runs/, report.db, judge calibration) must
+# ALWAYS resolve here, never against the process cwd: MCP clients (ZCode)
+# spawn agb serve with their own working directory, which silently leaks
+# run folders into whatever project is open (seen 2026-11-13).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RUNS_DIR = REPO_ROOT / "runs"
+
 _SK_PATTERN = re.compile(r"sk-[A-Za-z0-9_\-]{8,}")
 
 
